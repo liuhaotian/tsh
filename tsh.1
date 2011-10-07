@@ -1,0 +1,22 @@
+.\" Process this file with
+.\" groff -man -Tascii tsh.1
+.\"
+.TH TSH 1 "OCTOBER 2011" "NU EECS 343" "NU EECS 343 - Operating Systems - Fall 2011"
+.SH NAME
+tsh \- A tiny shell
+.SH SYNOPSIS
+.B tsh
+.SH DESCRIPTION
+.B tsh
+Run the executable file within PATH environments and current working directory as well as an absolute path. Arguments are acceptable with SPACE separating them. "\ " indicates a space within the path. "'" and """ specify an argument while these symbols will be ignored. 
+.SH BUILT-IN COMMANDS
+.IP exit
+Quit tsh 
+.IP cd
+change the directory
+.SH DESIGN APPROACH
+In the terminal, used the man to get all the functions' manual that suggested in readme.api. Than read all the codes in tsh.c tsh.h interpreter.c interpreter.h runtime.c runtime.h. Following the handout instruction, try the makefile. First, I wrote another method within makefile as $ make firsttest. Then I found it can just be done by typing make in the shell. After noticed the interpreter having no returns, I decided to call the exec function just before the freecommand function. As the exec worked, the framework reached the goal. Figured out how to implement the fork() to create child. Meanwhile, found that the prompt line displayed in earlier then the child output. So, fixed it as put a wait() before the child end and then continued the while loop. But it didn't work with a relative path, so used the execvp(). However, the problem came out that I cannot change the working folder as the cd command didn't work. After googling, used the chdir() to redirect the current working directory and also convert the cd command to a buildin command. Unfortunately, viewing the runtime.c, I came to realize there was a structure that was ready to use. To save time, moved all exec and relative codes to the runtime.c and did some bug fixing that merging caused. After that, to make it perfect, in the ResolveExternalCmd(), I built a GetPath() to get the PATH environment variables and extract all the paths, and added the cwdpath, so that we would check all the path.
+.IP As for extra credit, the ReadConfig() is built. It reads the .tshrc in HOME folder. And ignores the line beginning with '#'. If the line contains a '=', it will call the interpreter, and it will be run as a buildin functions that call the putenv() to set an environment variable. Also, as for prompt, I use the PrintNewLine within io.c. This functions translate the PROMPT variable with a switch that \u \w \t \h are 4 cases which will be translated in separate ways. In addition, when interpreter the cmdline with a argv beginning with '$', here are several codes in interpreter.c to covert it into the environment valve.
+.IP Tsh works on my Mac, but it doesn't work on the delta.eecs.northwestern.edu server. Also, when sending a ctrl+d signal, the tsh keeps looping on the other hand ctrl+c works well.
+.SH AUTHOR
+Haotian Liu - hlc720 - haotian@u.northwestern.edu

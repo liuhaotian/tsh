@@ -1,0 +1,6 @@
+SHELL=SELF
+script -f -q
+SLEEP 1
+PS1="[\u@\h:\w] % "
+whoami
+exit

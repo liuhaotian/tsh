@@ -1,0 +1,6 @@
+SHELL=SELF
+script -f -q
+SLEEP 1
+PS1="foo> "
+echo "prompt test"
+exit
