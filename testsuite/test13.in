@@ -1,4 +1,0 @@
-SHELL=SELF
-script -f -q
-SLEEP 1
-exit

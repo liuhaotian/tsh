@@ -1,4 +1,0 @@
-SLEEP 1
-VAR=foo
-echo $VAR
-exit

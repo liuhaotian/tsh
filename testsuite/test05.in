@@ -1,3 +1,0 @@
-ls -S -r 
-grep ls test.5
-exit
