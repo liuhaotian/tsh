@@ -1,0 +1,5 @@
+alias showdir='echo ls'
+showdir
+unalias showdir
+showdir
+exit

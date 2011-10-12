@@ -1,0 +1,8 @@
+
+
+The grading is based on the test suite which was also provided to you as well as manual testing as specified in the test suite as well. If you feel that the grading is wrong, please verify with the latest version of the test suite. If you can demonstrate that your code passes the test cases, we will definitely correct your grades. However, there is no partial credit for test cases 1-20. We ignored job related output when grading the projects with the automated test suite. 
+
+Note:
+- Segfaults during the execution in the test suite are often due to incorrect memory handling. This explains also why it runs outside the test suite in some instances, since incorrect memory references don't necessarily lead to a segfault.
+- We limited the maximal deduction for memory leaks as some of you produced a very large number of them. Valgrind does not only tell you about memory leaks, but also about incorrect memory references. So please make use of it.
+

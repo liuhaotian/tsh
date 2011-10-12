@@ -1,0 +1,6 @@
+alias showdir='ls '
+alias home='~/'
+showdir home
+unalias showdir
+unalias home
+exit

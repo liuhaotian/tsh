@@ -1,0 +1,71 @@
+Project 2: tsh - a tiny shell, part 2
+
+Grading guide
+
+Starting with 100 points, the following are 'discounts'.
+
+-----------------------------------------------------------
+Item                                     Discount 
+                                         points
+-----------------------------------------------------------
+ 1.(No) documentation, (No) man page 		          
+   (No) self-documented & commented code  10
+ 2.It doesn't compile			 100
+ 3.Compilation warning messages		   2 per
+ 4.Test cases				   3.5 per (25 cases)
+ 5.Memory leaks				   5 per
+ 6.Memory leak warnings 		   1 per
+-----------------------------------------------------------
+
+Test Cases: 
+
+We will use the following test cases (and the associated test suite)
+to evaluate and grade your project.  All test cases end with the
+"exit" command.
+
+1) background job
+2) multiple background jobs, and the jobs command
+3) background and foreground jobs
+4) multiple background jobs, and the jobs command
+5) background and foreground jobs
+6) multiple background jobs, and the jobs command
+7) background jobs and fg command
+8) background jobs, fg command, then foreground jobs
+9) ctrl-c signal
+10) background and foreground jobs, ctrl-c signal
+11) background and foreground jobs, ctrl-z signal, fg command
+12) background and foreground jobs, ctrl-z signal, bg command
+13) background job, fg command, ctrl-z, fg command
+14) ctrl-z, bg and fg commands on the same job
+15) ctrl-c signal
+16) ctrl-c and ctrl-z handled by the shell
+17) ctrl-z, fg and bg commands to multiple jobs
+18) ctrl-c handled by the shell
+19) single set of pipes
+20) single set of pipes
+21) single set of pipes
+22) multiple pipes
+23) multiple pipes
+24) redirection
+25) redirection, < and > on the same command line
+
+For extra credit (total 20 points):
+
+There are 5 extra credit test cases, worth 4 points each.
+
+26) set alias
+27) set alias, unset alias
+28) unset failed alias
+29) list aliases
+30) multiple aliases same line
+
+Using the sdriver.pl driver script:
+
+To automatically test your project, we use the testsuite/sdriver.pl
+script to send signals to your shell.  As described in the handout,
+you can run the driver from the testsuite directory:
+
+./sdriver.pl -t testXX.in -s .././tsh
+
+To see the output of the reference implementation, replace ".././tsh"
+with "./tsh-ref".
