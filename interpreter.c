@@ -65,14 +65,13 @@ typedef struct string_l
   struct string_l* next;
 } stringL;
 
-int BUFSIZE = 400;
+int BUFSIZE = 512;
 int MAXARGS = 100;
 
 /**************Function Prototypes******************************************/
 
 commandT*
 getCommand(char* cmdLine);
-
 
 void
 freeCommand(commandT* cmd);
@@ -94,17 +93,10 @@ freeCommand(commandT* cmd);
 void
 Interpret(char* cmdLine)
 {
-//  int i = 0;
-
   commandT* cmd = getCommand(cmdLine);
-/*
-  printf("argc: %d\n", cmd->argc);
-  for (i = 0; cmd->argv[i] != 0; i++)
-    {
-      printf("#%d|%s|\n", i, cmd->argv[i]);
-    }
-*/
+  
 	RunCmd(cmd);
+
   freeCommand(cmd);
 } /* Interpret */
 
@@ -157,24 +149,7 @@ getCommand(char* cmdLine)
             {
               // End of an argument
               //printf("\t\tend of argument %d, got:%s\n", cmd.argc, tmp);
-				
-				// check $ variable
-				char* tmpval;
-				if(*tmp=='$')
-				{
-					tmpval=getenv(tmp+1);
-					if(tmpval!=NULL)
-					{
-						tmpLen=strlen(tmpval);
-						strcpy(tmp,tmpval);
-					}
-					else if(tmpval==NULL)
-					{
-						strcpy(tmp,"");
-					}
-				}
-				
-				cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
+              cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
               strcpy(cmd->argv[cmd->argc], tmp);
 
               inArg = 0;
@@ -252,22 +227,6 @@ getCommand(char* cmdLine)
   if (tmpLen > 0)
     {
       //printf("\t\tend of argument %d, got:%s\n", cmd.argc, tmp);
-	// check $ variable
-	char* tmpval;
-	if(*tmp=='$')
-	{
-		tmpval=getenv(tmp+1);
-		if(tmpval!=NULL)
-		{
-			tmpLen=strlen(tmpval);
-			strcpy(tmp,tmpval);
-		}
-		else if(tmpval==NULL)
-		{
-			strcpy(tmp,"");
-		}
-	}			
-				
       cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
       strcpy(cmd->argv[cmd->argc], tmp);
 

@@ -63,9 +63,6 @@
 EXTERN void
 Interpret(char*);
 
-EXTERN void
-freeCommand();
-
 /************External Declaration*****************************************/
 
 /**************Definition***************************************************/

@@ -64,15 +64,15 @@ typedef struct command_t
 } commandT;
 
 /************Global Variables*********************************************/
-commandT* envtable;
+
+char* currentdir; char* filedir; char** paths;
 
 /***********************************************************************
  *  Title: Force a program exit
  * ---------------------------------------------------------------------
  *    Purpose: Signals that a program exit is required
  ***********************************************************************/
-VAREXTERN(bool forceExit, FALSE)
-;
+VAREXTERN(bool forceExit, FALSE);
 
 /************Function Prototypes******************************************/
 
@@ -188,5 +188,6 @@ CheckJobs();
 /************External Declaration*****************************************/
 
 /**************Definition***************************************************/
+
 
 #endif /* __RUNTIME_H__ */

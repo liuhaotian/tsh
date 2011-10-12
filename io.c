@@ -44,7 +44,6 @@
 #include <unistd.h>
 #include <termios.h>
 #include <assert.h>
-#include <time.h>
 
 /************Private include**********************************************/
 #include "io.h"
@@ -81,41 +80,7 @@ bool isReading = FALSE;
 void
 PrintNewline()
 {
-	int i;
-	char PROMPT[MAXLINE];
-	time_t curtime=time(NULL);
-	struct tm* timeinfo;
-	timeinfo=localtime(&curtime);
-	char hostname[MAXLINE];
-	gethostname(hostname,sizeof(hostname));
-	if(getenv("PS1")!=NULL)strcpy(PROMPT,getenv("PS1"));
-	else strcpy(PROMPT,"");
-	for(i=0;PROMPT[i]!=0;i++)
-		{
-			if(PROMPT[i]=='\\')
-			{
-				i++;
-				switch(PROMPT[i]){
-					case 'u':
-					printf("%s",getenv("USER"));
-					break;
-					case 'h':
-					printf("%s",hostname);
-					break;
-					case 'w':
-					printf("%s",getenv("PWD"));
-					break;
-					case 't':
-					printf("%02d:%02d:%02d",timeinfo->tm_hour,timeinfo->tm_min,timeinfo->tm_sec);
-					break;
-					default:
-					printf("\\%c",PROMPT[i]);
-				}
-			}
-			else
-				printf("%c",PROMPT[i]);
-
-		}
+  putchar('\n');
 } /* PrintNewLine */
 
 

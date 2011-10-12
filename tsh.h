@@ -51,6 +51,9 @@
 #endif
 
 /************Global Variables*********************************************/
+char** paths;
+char* filedir;
+char* currentdir;
 
 /************Function Prototypes******************************************/
 

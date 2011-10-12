@@ -9,12 +9,13 @@
  *    Copyright: (C) 2002 by Stefan Birrer
  ***************************************************************************/
 #define __MYSS_IMPL__
+#define _GNU_SOURCE
 
 /************System include***********************************************/
 #include <stdlib.h>
-#include <stdio.h>
 #include <signal.h>
 #include <string.h>
+#include <unistd.h>
 
 /************Private include**********************************************/
 #include "tsh.h"
@@ -29,50 +30,22 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
-#define BUFSIZE 512
+#define BUFSIZE 80
 
 /************Global Variables*********************************************/
+char** paths;
+char* filedir;
+char* currentdir;
+char* cmdLine;
+pid_t pid;
 
 /************Function Prototypes******************************************/
 /* handles SIGINT and SIGSTOP signals */
-static void
-sig(int);
+static void sig(int);
 
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
-/*
- * ReadConfig
- *
- * arguments: none
- *
- * returns: none
- *
- * Read the config in ~/.tshrc. If not exists, it will be created.
- * All the variables should be defined as a global variables in the config.h
- */
-void
-ReadConfig()
-{
-	char pathtshrc[MAXLINE];
-	strcpy(pathtshrc, getenv("HOME"));
-	strcat(pathtshrc, "/.tshrc");
-	FILE *fp;
-	char tmpline[MAXLINE];
-	if(NULL==(fp=fopen(pathtshrc, "r"))){
-	//	printf("not exists!\n");
-		return;
-	}
-	else{
-		while(fgets(tmpline,MAXLINE,fp)!=NULL)
-		{
-			if(*tmpline=='#'||*tmpline=='\n'||*tmpline==EOF||*tmpline==0)continue;
-			if(tmpline[strlen(tmpline)-1]=='\n')tmpline[strlen(tmpline)-1]=0;
-			Interpret(tmpline);
-		}		
-		fclose(fp);
-	}	
-}  /* ReadConfig */
 
 /*
  * main
@@ -89,40 +62,56 @@ int
 main(int argc, char *argv[])
 {
   /* Initialize command buffer */
-  char* cmdLine = malloc(sizeof(char*) * BUFSIZE);
-
-envtable = malloc(sizeof(commandT) + sizeof(char*) * 512);
-envtable->argv[0]=0;
-envtable->name=0;
-envtable->argc=0;
+  cmdLine = malloc(sizeof(char*) * BUFSIZE);
 
   /* shell initialization */
   if (signal(SIGINT, sig) == SIG_ERR)
     PrintPError("SIGINT");
   if (signal(SIGTSTP, sig) == SIG_ERR)
     PrintPError("SIGTSTP");
-	
-	ReadConfig();
-  while (!forceExit) /* repeat forever */
+
+	// Initialize global vars
+	paths = (char**)malloc(100*sizeof(char*));
+	filedir = (char*)malloc(500*sizeof(char));
+	currentdir = (char*)malloc(500*sizeof(char));
+
+	char *pathsWithTokens = getenv("PATH");
+	// Using strtok to parse : out of pathsWithTokens and put each directory string into paths
+	int i = 0;
+	char* temp = strtok(pathsWithTokens, ":");
+	if (temp)
 	{
-		PrintNewline();
+		do
+		{
+			paths[i] = temp;
+			i++;
+		}
+		while ((temp = strtok(NULL, ":")) != NULL);
+	}
+
+  while (TRUE) /* repeat forever */
+    {
+			// Update currentdir
+			getcwd(currentdir, 500*sizeof(char));
       /* read command line */
       getCommandLine(&cmdLine, BUFSIZE);
 
       /* checks the status of background jobs */
       CheckJobs();
 
+      if (strcmp(cmdLine, "exit") == 0)
+        break;
+
       /* interpret command and line
        * includes executing of commands */
       Interpret(cmdLine);
-
-      if (strcmp(cmdLine, "exit") == 0)
-        forceExit = TRUE;
     }
 
   /* shell termination */
   free(cmdLine);
-freeCommand(envtable);
+	free(paths);
+	free(filedir);
+	free(currentdir);
   return 0;
 } /* main */
 
@@ -139,5 +128,9 @@ freeCommand(envtable);
 static void
 sig(int signo)
 {
-	printf("\r");
+	if (signo == SIGINT) // Handle SIGINT
+	{
+		kill(SIGINT, pid);
+		PrintNewline();		
+	}
 } /* sig */

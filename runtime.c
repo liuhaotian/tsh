@@ -79,6 +79,15 @@ typedef struct bgjob_l
 /* the pids of the background processes */
 bgjobL *bgjobs = NULL;
 
+/* global variable to hold current directory when runtime funtions called */
+char* currentdir;
+/* global variable to hold directory of found command file for ResolveExternalCmd and RunExternalCmd communication */
+char* filedir;
+/* global variable to hold paths from PATH */
+char** paths;
+
+pid_t pid;
+
 /************Function Prototypes******************************************/
 /* run command */
 static void
@@ -98,6 +107,8 @@ RunBuiltInCmd(commandT*);
 /* checks whether a command is a builtin command */
 static bool
 IsBuiltIn(char*);
+static void
+handler(int);
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -111,13 +122,12 @@ IsBuiltIn(char*);
  *
  * returns: none
  *
- * Runs the given command.
+ * Runs the given command. Initializes globals.
  */
 void
 RunCmd(commandT* cmd)
 {
   RunCmdFork(cmd, TRUE);
-wait(NULL);
 } /* RunCmd */
 
 
@@ -131,7 +141,7 @@ wait(NULL);
  * returns: none
  *
  * Runs a command, switching between built-in and external mode
- * depending on cmd->argv[0].
+ * depending on cmd->argv[0]
  */
 void
 RunCmdFork(commandT* cmd, bool fork)
@@ -139,13 +149,23 @@ RunCmdFork(commandT* cmd, bool fork)
   if (cmd->argc <= 0)
     return;
   if (IsBuiltIn(cmd->argv[0]))
-    {
-      RunBuiltInCmd(cmd);
-    }
-  else
-    {
-      RunExternalCmd(cmd, fork);
-    }
+	{
+		RunBuiltInCmd(cmd);
+	}
+  else if (ResolveExternalCmd(cmd))
+	{
+		RunExternalCmd(cmd, fork);
+	}
+	else
+	{
+		char* temp = (char*)malloc(500*sizeof(char));
+		char* unfoundCommand = cmd->argv[0];
+		char* unresolvedCommand = "line 1: "; // does line 1 refer to error in first argument?
+		strcpy(temp, unresolvedCommand);
+		strcat(temp, unfoundCommand);
+		PrintPError(temp);
+		free(temp);
+	}
 } /* RunCmdFork */
 
 
@@ -232,8 +252,7 @@ RunCmdRedirIn(commandT* cmd, char* file)
 static void
 RunExternalCmd(commandT* cmd, bool fork)
 {
-  if (ResolveExternalCmd(cmd))
-    Exec(cmd, fork);
+	Exec(cmd, fork);
 }  /* RunExternalCmd */
 
 
@@ -245,65 +264,61 @@ RunExternalCmd(commandT* cmd, bool fork)
  *
  * returns: bool: whether the given command exists
  *
- * Determines whether the command to be run actually exists.
+ * Determines whether the command to be run actually exists, and changes global var filedir to its location
+ * if it does for RunExternalCmd.
  */
 static bool
 ResolveExternalCmd(commandT* cmd)
 {
-	int ret=0,i,j;
-	char pathtmp[MAXLINE];
-	char pathcwd[MAXLINE*2];
-	char pathenv[MAXLINE*3];
-	char* path[10];
-	strcpy(pathenv, getenv("PATH"));
-	path[0]=pathenv;
-	getcwd(pathcwd,sizeof(pathcwd));
-	for(i=0,j=1;*(path[0]+i)!='\0';i++)
-	{
-	 	if(*(path[0]+i)==':')
-		{
-			*(path[0]+i)='\0';
-			path[j++]=path[0]+i+1;
-		}
-	}
-	path[j]=pathcwd;
+	char* filepath= (char*)malloc(500*sizeof(char)); //buffer for building filepaths ,memory leak issue possible here
 
-	if(*(cmd->argv[0])=='/')
+	if (*cmd->argv[0] == '.') //executable in currentdir
 	{
-		if((j=open(cmd->argv[0], O_RDONLY))>=0)
+		// get rid of . and add on currentdir before it and check if command exists, change filedir and return TRUE
+		char* temp = cmd->argv[0]; //move pt up to next char to rid .
+		temp++;
+		strcpy(filepath, currentdir); //move current directory to filepath buffer
+		filepath = strcat(filepath, temp); //append on the executable
+		
+		if (access(filepath, X_OK) == 0) // we can access it
 		{
-			close(j);
-			ret=1;
+			strcpy(filedir, filepath);
+			free(filepath);
+			return TRUE;
 		}
 	}
-	else if(*(cmd->argv[0])=='.')
+	else if (*cmd->argv[0] == '/') //absolute path
 	{
-		strcpy(pathtmp, pathcwd);
-		strcat(pathtmp, "/");
-		strcat(pathtmp, cmd->argv[0]);
-		if((j=open(pathtmp, O_RDONLY))>=0)
+		if (access(cmd->argv[0], X_OK) == 0) // we can access it
 		{
-			close(j);
-			ret=1;
+			strcpy(filedir, cmd->argv[0]);
+			free(filepath);
+			return TRUE;
 		}
 	}
-	else
+	else // search through directories in PATH
 	{
-		for(i=0;(path[i]!=NULL)&&(*path[i]=='/');i++)
+		int i = 0;
+		const char* argument = cmd->argv[0];
+		while (paths[i] != NULL) // While loop over each directory in PATHS
 		{
-			strcpy(pathtmp, path[i]);
-			strcat(pathtmp, "/");
-			strcat(pathtmp, cmd->argv[0]);
-			if((j=open(pathtmp, O_RDONLY))>=0)
+			strcpy(filepath, paths[i]);
+			//add / + argv[0] to paths[i]
+			filepath = strcat(filepath, "/"); //possible source for memory leaks when overloading temp, better concatenating process should go here
+			filepath = strcat(filepath, argument);
+
+			// use filepath to check if exists, change filedir to filepath and return TRUE
+			if (access(filepath, X_OK) == 0) // we can access it
 			{
-				close(j);
+				strcpy(filedir, filepath);
+				free(filepath);
+				return TRUE;
 			}
-			ret=(j>0||ret>0);
+			i++;
 		}
 	}
-	if(ret<=0)
-		perror("exec");
-	return ret;
+	free(filepath);
+	return FALSE;
 } /* ResolveExternalCmd */
 
 
@@ -318,22 +333,37 @@ ResolveExternalCmd(commandT* cmd)
  *
  * Executes a command.
  */
-static void
+void
 Exec(commandT* cmd, bool forceFork)
 {
-	if(forceFork==TRUE){
-			pid_t forkreturn;
-			forkreturn=fork();
-			if(forkreturn==0){
-				//printf("%s\n",cmd->argv[0]);
-				execvp(cmd->argv[0],cmd->argv);
-				PrintPError("exec");
-				forceExit = TRUE;
+	// Fork and execute the command using filedir as command and cmd->argv as arguments
+	int status;
+	
+	pid = fork();
+	if (pid >= 0) // fork succeeds
+	{
+		if (pid == 0) // child process
+		{
+			signal(SIGINT, handler);
+			// Child will execv the command
+			//setpgid(0, 0); only for backgrounded processes
+			if (execv(filedir, cmd->argv) < 0)
+				PrintPError("Error in executing the command");
+			exit(0);
+		}
+		else // parent
+		{
+			while ((pid = wait(&status)))
+			{
+				if (errno == ECHILD)
+					break;
 			}
 		}
-		else{
-			printf("It's not fork!\n");
-		}
+	}
+	else // fork errors
+	{
+		PrintPError("Error in fork");
+	}	
 } /* Exec */
 
 
@@ -352,20 +382,10 @@ Exec(commandT* cmd, bool forceFork)
 static bool
 IsBuiltIn(char* cmd)
 {
-	int i;
-	if(strcmp(cmd, "exit")==0)
-		return TRUE;
-	else if(strcmp(cmd, "cd")==0)
-		return TRUE;
-//	else if(strcmp(cmd, "echo")==0)
-//		return TRUE;
-	else{
-		for(i=0;cmd[i]!=0;i++){
-			if(cmd[i]=='=')
-				return TRUE;
-		}
-	}
-	return FALSE;
+	  if (strcmp(cmd, "pwd") == 0 || strcmp(cmd, "cd") == 0)
+			return TRUE;
+		else
+			return FALSE;
 } /* IsBuiltIn */
 
 
@@ -382,82 +402,56 @@ IsBuiltIn(char* cmd)
 static void
 RunBuiltInCmd(commandT* cmd)
 {
-	int i;
-	if(strcmp(cmd->argv[0], "cd")==0){
-		if(cmd->argv[1]==NULL)
-		{
-			chdir(getenv("HOME"));
-		}
-		else if(*(cmd->argv[1])=='.')
-		{
-			char pathcwd[MAXLINE],pathtmp[MAXLINE];
-			getcwd(pathcwd,sizeof(pathcwd));
-			strcpy(pathtmp, pathcwd);
-			strcat(pathtmp, "/");
-			strcat(pathtmp, cmd->argv[1]);
-			chdir(pathtmp);
-		}
-		else if (chdir(cmd->argv[1]) != 0)
-			perror("cd");
+	if (strcmp(cmd->argv[0], "pwd") == 0)
+	{
+		if (cmd->argc != 1) //something other than just pwd entered
+			PrintPError("The command pwd takes no arguments.");
+		else
+			Print(currentdir);	
 	}
-	else if(strcmp(cmd->argv[0], "echo")==0){
-		for(i=1;i<cmd->argc;i++){
-			if(*(cmd->argv[i])=='$')
-			{	
-				printf("%s ",getenv(cmd->argv[i]+1));
+
+	if (strcmp(cmd->argv[0], "cd") == 0) //cd needs to account for no argument, absolutes, and ..
+	{
+		// use cmd->argc (number or args including command cd) to switch between cases
+		if (cmd->argc >= 3) // too many args
+			PrintPError("The command cd takes one argument.");
+		else if (cmd->argc == 1) // no arguments given, chdir to HOME directory
+			{
+				if (chdir(getenv("HOME")) < 0)
+					PrintPError("Could not change directory.");
 			}
-			else
-				printf("%s ",cmd->argv[i]);
-		}
-		putchar('\n');
-	}
-	else{
-		int i,j;
-		for(i=0;cmd->name[i]!=0;i++){
-			if(cmd->name[i]=='='){
-				cmd->name[i]=0;// we break the string cmd-name, so it will be easy to find the variable in envtable
-				char tmp;
-				for(j=0;j<envtable->argc;j++){
-					if(strlen(envtable->argv[j])>=strlen(cmd->name))
-					{
-						tmp=*(envtable->argv[j]+i);
-						*(envtable->argv[j]+i)=0;
-						if(strcmp(envtable->argv[j],cmd->name)==0){
-						/*	free(envtable->argv[j]);
-							envtable->argv[envtable->argc]=malloc(sizeof(char)*(strlen(cmd->name)+1));
-							strcpy(envtable->argv[envtable->argc],cmd->name);
-							putenv(envtable->argv[envtable->argc]);
-							*/
-							*(envtable->argv[j]+i)=tmp;
-							break;
-						}
-						*(envtable->argv[j]+i)=tmp;
-					}	
-				}//find the envtable index of cmd->name
-				cmd->name[i]='=';//restore the '='
-				
-				if(j<envtable->argc){// we find the env variable in the envtable
-					free(envtable->argv[j]);
-					envtable->argv[j]=malloc(sizeof(char)*(strlen(cmd->name)+1));
-					strcpy(envtable->argv[j],cmd->name);
-					putenv(envtable->argv[j]);
-					//printf("We repalce!\n");
-				}
-				else if(j==envtable->argc)// we cannot find it, so create another
+		else
+			if (*cmd->argv[1] == '/') // absolute path
 				{
-					envtable->argv[envtable->argc]=malloc(sizeof(char)*(strlen(cmd->name)+1));
-					strcpy(envtable->argv[envtable->argc],cmd->name);
-					putenv(envtable->argv[envtable->argc]);
-					envtable->argc++;
-					envtable->argv[envtable->argc] = 0;
-					//printf("We create!\n");
+					if (chdir(cmd->argv[1]) < 0)
+						PrintPError("Could not change directory.");
 				}
-				
-				//printf("%s,%d",envtable->name,envtable->argc);
-				
-				break;
+			else if (*cmd->argv[1] == '.' && cmd->argv[1][1] == '.') // go back directories
+			{
+				char* tempPtr;
+				tempPtr = cmd->argv[1]; // ptr to walk over argument counting how many directories to go back
+				while (*tempPtr != '\0') // kind of a weak way to count, since we assume the user is putting periods
+				{
+					if (*tempPtr == '/') // skip the slashes
+						tempPtr++;
+					else
+					{
+						tempPtr += 2;
+						if (chdir("..") < 0) //go back one directory
+							PrintPError("Could not change directory.");
+					}
+				}
 			}
-		}
+			else // argument without . or / so chdir to currentdir + it
+			{
+				char* temp = (char*)malloc(500*sizeof(char));
+				strcpy(temp, currentdir);
+				strcat(temp, "/");
+				strcat(temp, cmd->argv[1]);
+				if (chdir(temp) < 0)
+					PrintPError("Could not change directory.");
+				free(temp);
+			}		
 	}
 } /* RunBuiltInCmd */
 
@@ -475,3 +469,13 @@ void
 CheckJobs()
 {
 } /* CheckJobs */
+
+static void
+handler(int signo)
+{
+	if (signo == SIGINT)
+	{
+		kill(pid, SIGINT);
+		exit(0);	
+	}
+}
