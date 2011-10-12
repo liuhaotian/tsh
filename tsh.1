@@ -1,7 +1,7 @@
 .\" Process this file with
 .\" groff -man -Tascii tsh.1
 .\"
-.TH TSH 1 "OCTOBER 2009" "NU EECS 343" "NU EECS 343 - Operating Systems - Fall 2009"
+.TH TSH 1 "OCTOBER 2011" "NU EECS 343" "NU EECS 343 - Operating Systems - Fall 2011"
 .SH NAME
 tsh \- A tiny shell
 .SH SYNOPSIS
@@ -19,4 +19,5 @@ Change the working directory, arguments include absolute paths, ./ paths, and ..
 .SH DESIGN APPROACH
 The approach taken was to have a loop in main to repeatedly look for the command line, parse it, and call the interpreter. The interpreter would then call RunCmd with the command line, which looks at the first argument and decides whether it is built-in (and if so to execute the built-in immediately) or if the command needs to be resolved. It does this by calling the ResolveExternalCmd() function, which takes an array of strings to the path hierarchy denoted from the PATH environment. It first looks to see whether the command is an executable in the current working directory or if it is an absolute command to an executable and handles it appropriately. If it is neither, then it searches through the directories in the array for it. If at any point ResolveExternalCmd() finds the executable (by running the system call access() on it), it changes a global variable to the full path for the executable and returns TRUE to RunCmd(). This allows RunCmd() to call Exec() through RunExternalCmd() and to fork and execv the program. The array for the PATH hierarchy was built before the while loop in main (by utilizing the strtok() string function to parse out :) and stored as a global variable. Finally, two signal handlers were installed to handle SIGINT respectively for the parent and the running child process in the foreground. No extra credit was attempted. The major challenges were implementing cd and ResolveExternalCmd() because they must account for various argument types. Also, knowing when to malloc variables and when to free them as well as utilizing many pointers and arrays required lots of debugging for SEGFAULTS or memory leaks.
 .SH AUTHOR
-George Wheaton, gjw571, GeorgeWheaton2013@u.northwestern.edu
+George Wheaton	gjw571 GeorgeWheaton2013@u.northwestern.edu			
+Haotian Liu	 hlc720 haotian@u.northwestern.edu
