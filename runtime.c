@@ -127,7 +127,39 @@ handler(int);
 void
 RunCmd(commandT* cmd)
 {
-  RunCmdFork(cmd, TRUE);
+	int redirstatus=0;
+	char redirfile[MAXLINE];
+	if( ( cmd->argc-2>=0 ) && (cmd->argv[cmd->argc-2][0] == '>') ){//we get the redir out.
+		strcpy(redirfile,cmd->argv[cmd->argc-1]);
+		
+		free(cmd->argv[cmd->argc-2]);//wo don't need it anymore
+		free(cmd->argv[cmd->argc-1]);
+		cmd->argv[cmd->argc-2] = 0;
+		cmd->argv[cmd->argc-1] = 0;
+		cmd->argc=cmd->argc-2;
+		
+		RunCmdRedirOut(cmd, redirfile);//redirect output
+		redirstatus=1;
+	}
+	else if( ( cmd->argc-2>=0 ) && ( cmd->argv[cmd->argc-2][0] == '<') ){//we get the redir in
+		strcpy(redirfile,cmd->argv[cmd->argc-1]);
+		
+		free(cmd->argv[cmd->argc-2]);//wo don't need it anymore
+		free(cmd->argv[cmd->argc-1]);
+		cmd->argv[cmd->argc-2] = 0;
+		cmd->argv[cmd->argc-1] = 0;
+		cmd->argc=cmd->argc-2;
+		
+		RunCmdRedirIn(cmd, redirfile);//redirect input
+		redirstatus=1;
+	}
+	
+	if(redirstatus==1)
+	{
+		;
+	}
+	else  
+		RunCmdFork(cmd, TRUE);
 } /* RunCmd */
 
 
@@ -218,6 +250,28 @@ RunCmdPipe(commandT* cmd1, commandT* cmd2)
 void
 RunCmdRedirOut(commandT* cmd, char* file)
 {
+	int standardout = dup(1);
+	int fileout = open(file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH);
+	//write only. if not exists, create it. if exists, delete it. rwxr--r--
+	
+	if(fileout < 0){
+		PrintPError("OpenOutFile");
+		return;
+	}
+	close(1);	//close standard output
+	if(dup(fileout) != 1){
+		PrintPError("DupOutFile");
+		return;
+	}
+	close(fileout);
+	
+	RunCmd(cmd);
+	
+	close(1);	//close redir out, and back to normal
+	if(dup(standardout)!=1){
+		PrintPError("DupStdOutFile");
+		return;
+	}
 } /* RunCmdRedirOut */
 
 
@@ -235,6 +289,28 @@ RunCmdRedirOut(commandT* cmd, char* file)
 void
 RunCmdRedirIn(commandT* cmd, char* file)
 {
+	int standardin = dup(0);
+	int filein = open(file, O_RDONLY);
+	//write only. if not exists, create it. if exists, delete it. rwxr--r--
+	
+	if(filein < 0){
+		PrintPError("OpenInFile");
+		return;
+	}
+	close(0);	//close standard output
+	if(dup(filein) != 0){
+		PrintPError("DupInFile");
+		return;
+	}
+	close(filein);
+	
+	RunCmd(cmd);
+	
+	close(0);	//close redir out, and back to normal
+	if(dup(standardin)!=0){
+		PrintPError("DupStdInFile");
+		return;
+	}
 }  /* RunCmdRedirIn */
 
 
