@@ -128,6 +128,8 @@ void
 RunCmd(commandT* cmd)
 {
 	int redirstatus=0;
+	int pipestatus=0;
+	int i;
 	char redirfile[MAXLINE];
 	if( ( cmd->argc-2>=0 ) && (cmd->argv[cmd->argc-2][0] == '>') ){//we get the redir out.
 		strcpy(redirfile,cmd->argv[cmd->argc-1]);
@@ -153,10 +155,48 @@ RunCmd(commandT* cmd)
 		RunCmdRedirIn(cmd, redirfile);//redirect input
 		redirstatus=1;
 	}
+	else
+	for(i = 0; i < cmd->argc; ++i)
+	{
+		if(cmd->argv[i][0] == '|')
+		{
+			pipestatus=i;
+			break;
+		}
+	}
 	
 	if(redirstatus==1)
 	{
 		;
+	}
+	else if(pipestatus > 0)
+	{
+		commandT* cmd1 = malloc(sizeof(commandT) + sizeof(char*) * cmd->argc);
+		commandT* cmd2 = malloc(sizeof(commandT) + sizeof(char*) * cmd->argc);
+		char* tmp = cmd->argv[pipestatus];
+		cmd->argv[pipestatus]=0;
+		
+		/*	copy the cmd before '|' to cmd1	*/
+		cmd1->name = cmd->argv[0];
+		cmd1->argc = pipestatus;
+		for(i = 0; cmd->argv[i] != 0; ++i)
+		{
+			cmd1->argv[i] = cmd->argv[i];
+		}
+		cmd1->argv[i]=0;
+		
+		/*	copy the cmd after '|' to cmd2	*/
+		cmd2->name = cmd->argv[pipestatus+1];
+		cmd2->argc = cmd->argc-pipestatus-1;
+		for(i = pipestatus +1; cmd->argv[i] != 0; ++i)
+		{
+			cmd2->argv[i-pipestatus-1] = cmd->argv[i];
+		}
+		cmd2->argv[i-pipestatus-1] = 0;
+		
+		cmd->argv[pipestatus]=tmp; //restore the cmd->argv[pipestatus]
+		
+		RunCmdPipe(cmd1,cmd2);
 	}
 	else  
 		RunCmdFork(cmd, TRUE);
@@ -233,6 +273,44 @@ RunCmdBg(commandT* cmd)
 void
 RunCmdPipe(commandT* cmd1, commandT* cmd2)
 {
+	int pipefp[2];
+	int standardout = dup(1);
+	int standardin  = dup(0);
+	
+	if(pipe(pipefp)==-1)PrintPError("Pipe Create Error");
+
+	/*	redirect the cmd1 output to pipe	*/
+	close(1);	//close standard output
+	if(dup(pipefp[1]) != 1){
+		PrintPError("Pipe Write");
+		return;
+	}
+	close(pipefp[1]);
+	
+	RunCmd(cmd1);
+	
+	close(1);	//close redir out, and back to normal
+	if(dup(standardout)!=1){
+		PrintPError("DupStdOutFile");
+		return;
+	}
+	
+	/*	redirect the pipe to cmd2 input		*/
+	close(0);	//close standard output
+	if(dup(pipefp[0]) != 0){
+		PrintPError("Pipe read");
+		return;
+	}
+	close(pipefp[0]);
+	
+	RunCmd(cmd2);
+	
+	close(0);	//close redir out, and back to normal
+	if(dup(standardin)!=0){
+		PrintPError("DupStdInFile");
+		return;
+	}
+	
 } /* RunCmdPipe */
 
 
