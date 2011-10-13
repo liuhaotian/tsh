@@ -75,7 +75,8 @@ main(int argc, char *argv[])
 	filedir = (char*)malloc(500*sizeof(char));
 	currentdir = (char*)malloc(500*sizeof(char));
 
-	char *pathsWithTokens = getenv("PATH");
+	char pathsWithTokens[1024];
+	strcpy(pathsWithTokens, getenv("PATH"));
 	// Using strtok to parse : out of pathsWithTokens and put each directory string into paths
 	int i = 0;
 	char* temp = strtok(pathsWithTokens, ":");
@@ -92,7 +93,9 @@ main(int argc, char *argv[])
   while (TRUE) /* repeat forever */
     {
 			// Update currentdir
-			getcwd(currentdir, 500*sizeof(char));
+			char *getCwdReturn = getcwd(currentdir, 500*sizeof(char));
+			if (getCwdReturn == NULL)
+				PrintPError("Error in finding current working directory");
       /* read command line */
       getCommandLine(&cmdLine, BUFSIZE);
 
