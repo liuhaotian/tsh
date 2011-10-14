@@ -70,9 +70,14 @@
 
 #define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
 
+#define _STOPPED 0
+#define _RUNNING 1
+
 typedef struct bgjob_l
 {
   pid_t pid;
+	int status; // either stopped or running
+	commandT* commands; 
   struct bgjob_l* next;
 } bgjobL;
 
@@ -86,7 +91,7 @@ char* filedir;
 /* global variable to hold paths from PATH */
 char** paths;
 
-pid_t pid;
+pid_t fgpid;
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -107,8 +112,6 @@ RunBuiltInCmd(commandT*);
 /* checks whether a command is a builtin command */
 static bool
 IsBuiltIn(char*);
-static void
-handler(int);
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -129,8 +132,16 @@ RunCmd(commandT* cmd)
 {
 	int redirstatus=0;
 	int pipestatus=0;
+	int bgstatus=0;
 	int i;
 	char redirfile[MAXLINE];
+	if ((cmd->argc - 1 >= 0) && cmd->argv[cmd->argc - 1][0] == '&') { //we need to background
+		free(cmd->argv[cmd->argc-1]);
+		cmd->argv[cmd->argc-1] = 0;
+		cmd->argc--;
+
+		bgstatus = 1;
+	}
 	if( ( cmd->argc-2>=0 ) && (cmd->argv[cmd->argc-2][0] == '>') ){//we get the redir out.
 		strcpy(redirfile,cmd->argv[cmd->argc-1]);
 		
@@ -198,8 +209,12 @@ RunCmd(commandT* cmd)
 		
 		RunCmdPipe(cmd1,cmd2);
 	}
-	else  
-		RunCmdFork(cmd, TRUE);
+	else {
+		if (bgstatus)
+			RunCmdFork(cmd, FALSE);
+		else
+			RunCmdFork(cmd, TRUE);
+	}
 } /* RunCmd */
 
 
@@ -208,7 +223,7 @@ RunCmd(commandT* cmd)
  *
  * arguments:
  *   commandT *cmd: the command to be run
- *   bool fork: whether to fork
+ *   bool fg: whether to fg
  *
  * returns: none
  *
@@ -216,7 +231,7 @@ RunCmd(commandT* cmd)
  * depending on cmd->argv[0]
  */
 void
-RunCmdFork(commandT* cmd, bool fork)
+RunCmdFork(commandT* cmd, bool fg)
 {
   if (cmd->argc <= 0)
     return;
@@ -226,7 +241,7 @@ RunCmdFork(commandT* cmd, bool fork)
 	}
   else if (ResolveExternalCmd(cmd))
 	{
-		RunExternalCmd(cmd, fork);
+		RunExternalCmd(cmd, fg);
 	}
 	else
 	{
@@ -254,7 +269,7 @@ RunCmdFork(commandT* cmd, bool fork)
 void
 RunCmdBg(commandT* cmd)
 {
-  // TODO
+  // Not used, we use Exec with the fg bool given through RunExternalCmd
 } /* RunCmdBg */
 
 
@@ -397,16 +412,16 @@ RunCmdRedirIn(commandT* cmd, char* file)
  *
  * arguments:
  *   commandT *cmd: the command to be run
- *   bool fork: whether to fork
+ *   bool fg: whether to fg
  *
  * returns: none
  *
  * Tries to run an external command.
  */
 static void
-RunExternalCmd(commandT* cmd, bool fork)
+RunExternalCmd(commandT* cmd, bool fg)
 {
-	Exec(cmd, fork);
+	Exec(cmd, fg);
 }  /* RunExternalCmd */
 
 
@@ -481,36 +496,40 @@ ResolveExternalCmd(commandT* cmd)
  *
  * arguments:
  *   commandT *cmd: the command to be run
- *   bool forceFork: whether to fork
+ *   bool fg: whether to fg
  *
  * returns: none
  *
  * Executes a command.
  */
 void
-Exec(commandT* cmd, bool forceFork)
+Exec(commandT* cmd, bool fg)
 {
 	// Fork and execute the command using filedir as command and cmd->argv as arguments
 	int status;
-	
+	int pid;
+
 	pid = fork();
 	if (pid >= 0) // fork succeeds
 	{
 		if (pid == 0) // child process
 		{
-			signal(SIGINT, handler);
+			if (!fg)
+				setpgid(0, 0); //only for backgrounded processes
 			// Child will execv the command
-			//setpgid(0, 0); only for backgrounded processes
 			if (execv(filedir, cmd->argv) < 0)
 				PrintPError("Error in executing the command");
 			exit(0);
 		}
-		else // parent
+		else // parent wait if fg set
 		{
-			while ((pid = wait(&status)))
-			{
-				if (errno == ECHILD)
-					break;
+			if (fg) {
+				fgpid = pid; //set global fgpid to current pid
+				while ((pid = wait(&status)))
+				{
+					if (errno == ECHILD)
+						break;
+				}
 			}
 		}
 	}
@@ -623,13 +642,3 @@ void
 CheckJobs()
 {
 } /* CheckJobs */
-
-static void
-handler(int signo)
-{
-	if (signo == SIGINT)
-	{
-		kill(pid, SIGINT);
-		exit(0);	
-	}
-}

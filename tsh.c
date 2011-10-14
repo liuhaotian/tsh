@@ -37,7 +37,7 @@ char** paths;
 char* filedir;
 char* currentdir;
 char* cmdLine;
-pid_t pid;
+pid_t fgpid;
 
 /************Function Prototypes******************************************/
 /* handles SIGINT and SIGSTOP signals */
@@ -133,7 +133,7 @@ sig(int signo)
 {
 	if (signo == SIGINT) // Handle SIGINT
 	{
-		kill(SIGINT, pid);
+		kill(SIGINT, fgpid);
 		PrintNewline();		
 	}
 } /* sig */
