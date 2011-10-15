@@ -56,6 +56,9 @@
 #define VAREXTERN(x, y) extern x;
 #endif
 
+#define _STOPPED 0
+#define _RUNNING 1
+
 typedef struct command_t
 {
   char* name;
@@ -65,7 +68,20 @@ typedef struct command_t
 
 /************Global Variables*********************************************/
 
-char* currentdir; char* filedir; char** paths;
+char* currentdir; char* filedir; char** paths; pid_t fgpid; pid_t lspid; char* fgcommands;
+
+typedef struct bgjob_l
+{
+  pid_t pid;
+	int status; // either stopped or running
+	char* commands;
+  struct bgjob_l* next;
+} bgjobL;
+
+int addjob(pid_t, int, char*);
+int removejob(bgjobL*);
+bgjobL* findjobindex(int);
+bgjobL* findjobpid(pid_t);
 
 /***********************************************************************
  *  Title: Force a program exit

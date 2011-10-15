@@ -54,6 +54,9 @@
 char** paths;
 char* filedir;
 char* currentdir;
+char* fgcommands;
+pid_t fgpid;
+pid_t lspid;
 
 /************Function Prototypes******************************************/
 

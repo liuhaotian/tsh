@@ -73,14 +73,6 @@
 #define _STOPPED 0
 #define _RUNNING 1
 
-typedef struct bgjob_l
-{
-  pid_t pid;
-	int status; // either stopped or running
-	commandT* commands; 
-  struct bgjob_l* next;
-} bgjobL;
-
 /* the pids of the background processes */
 bgjobL *bgjobs = NULL;
 
@@ -91,7 +83,9 @@ char* filedir;
 /* global variable to hold paths from PATH */
 char** paths;
 
-pid_t fgpid;
+pid_t fgpid; // pid of foreground
+pid_t lspid; // pid of last stopped
+char* fgcommands; // keeps command string of current foreground so fg and bg can use it
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -112,6 +106,12 @@ RunBuiltInCmd(commandT*);
 /* checks whether a command is a builtin command */
 static bool
 IsBuiltIn(char*);
+
+int addjob(pid_t, int, char*);
+int removejob(bgjobL*);
+bgjobL* findjobindex(int);
+bgjobL* findjobpid(pid_t);
+
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -509,6 +509,20 @@ Exec(commandT* cmd, bool fg)
 	int status;
 	int pid;
 
+	char* commands = (char*)malloc(500*sizeof(char));
+	int i = 0;
+	while (cmd->argv[i] != 0) // traverse commands and copy into one new jobcommands string
+	{
+		if (i == 0)
+		strcpy(commands, cmd->argv[i]);
+	  else
+		{
+		 	strcat(commands, " ");
+			strcat(commands, cmd->argv[i]);
+		}
+		i++;
+	}
+
 	pid = fork();
 	if (pid >= 0) // fork succeeds
 	{
@@ -525,10 +539,26 @@ Exec(commandT* cmd, bool fg)
 		{
 			if (fg) {
 				fgpid = pid; //set global fgpid to current pid
-				while ((pid = wait(&status)))
+				strcpy(fgcommands, commands);
+				while ((pid = waitpid(pid, &status, WUNTRACED || WNOHANG)))
 				{
 					if (errno == ECHILD)
 						break;
+				}
+			}
+			else // bg
+			{
+				char* ampersand = " &";
+				strcat(commands, ampersand);
+					
+				int jobnumber = addjob(pid, _RUNNING, commands);
+				if (jobnumber == 0)
+					PrintPError("Error in adding job");
+				else
+				{
+					bgjobL* temp = findjobpid(pid);
+					printf("[%d] %d", jobnumber, temp->pid);
+					PrintNewline();
 				}
 			}
 		}
@@ -536,7 +566,8 @@ Exec(commandT* cmd, bool fg)
 	else // fork errors
 	{
 		PrintPError("Error in fork");
-	}	
+	}
+	free(commands);	
 } /* Exec */
 
 
@@ -555,7 +586,7 @@ Exec(commandT* cmd, bool fg)
 static bool
 IsBuiltIn(char* cmd)
 {
-	  if (strcmp(cmd, "pwd") == 0 || strcmp(cmd, "cd") == 0)
+	  if (strcmp(cmd, "pwd") == 0 || strcmp(cmd, "cd") == 0 || strcmp(cmd, "jobs") == 0 || strcmp(cmd, "fg") == 0 || strcmp(cmd, "bg") == 0)
 			return TRUE;
 		else
 			return FALSE;
@@ -626,7 +657,130 @@ RunBuiltInCmd(commandT* cmd)
 				free(temp);
 			}		
 	}
+	if (strcmp(cmd->argv[0], "jobs") == 0)
+	{
+		bgjobL* temp = bgjobs;
+		int i = 1;
+		while (temp != NULL)
+		{
+			if (temp->status) // running
+				printf("[%d]\tRunning\t\t\t\t%s\n", i, temp->commands);
+			else
+				printf("[%d]\tStopped\t\t\t\t%s\n", i, temp->commands);
+			temp = temp->next;
+			i++;
+		}
+	}
+	if (strcmp(cmd->argv[0], "bg") == 0)
+	{
+	}
+	if (strcmp(cmd->argv[0], "fg") == 0)
+	{
+	}
 } /* RunBuiltInCmd */
+
+/*
+ * Job Functions
+ */
+int addjob(pid_t jobpid, int jobstatus, char* jobcommands) // Makes and adds job to the job list and returns index of job
+{
+	int i = 1;
+	bgjobL* temp = bgjobs; // temporary header
+
+	bgjobL* newJob = NULL;
+	newJob = malloc(sizeof(bgjobL)); // malloc memory for new job
+	if (newJob == NULL)
+		PrintPError("Error in allocating memory for job");
+	// Initialize new job
+	newJob->pid = jobpid;
+	newJob->status = jobstatus;
+	newJob->commands = (char*)malloc(500*sizeof(char));
+	strcpy(newJob->commands, jobcommands);
+	newJob->next = NULL;
+
+	if (temp == NULL) // start of list
+	{
+		bgjobs = newJob; // move header
+		return i;
+	}
+	else // something at start of list
+	{
+		while (TRUE)
+		{
+			i++;
+			if (temp->next == NULL)
+			{
+				temp->next = newJob;
+				break;
+			}
+			temp = temp->next;
+		}
+		return i;
+	}
+}
+
+int removejob(bgjobL* job) // Removes job from list, keeping integrity of list, returns 0 if empty list or not found 1 if success
+{
+	bgjobL* temp = bgjobs; // set temp pointer to head of jobs list
+	if (temp == NULL) // noone in list
+		return 0;
+	// Find the node in list and delete and maintain list integrity
+	if (temp == job) // if first in list is the job
+	{
+		bgjobs = temp->next; // move header
+		free(job->commands); // free command pointer
+		free(job); // delete node
+		return 1;
+	}
+	else // search through remembering previous to set its next to job->next and delete job
+	{
+		while (temp->next != job && temp->next != NULL)
+			temp = temp->next;
+		if (temp->next == NULL) // we couldn't find it, not in list
+			return 0;
+		
+		temp->next = job->next;
+		free(job->commands);
+		free(job);
+		
+		return 1;
+	}
+}
+
+bgjobL* findjobindex(int index) // Looks for job of given index and returns it, else return NULL
+{
+	if (index < 1) // no such index
+		return NULL;
+
+	bgjobL* temp = bgjobs; // grab header
+	int i;
+	for (i = 1; i <= index; i++)
+	{
+		if (temp == NULL) // we reached end of list before finding index
+			return NULL;
+		
+		if (i == index) // we are at index and it is not NULL
+			return temp;
+
+		temp = temp->next;
+	}
+	return NULL; // shouldn't get here
+}
+
+bgjobL* findjobpid(pid_t jobpid) // Looks for job of given pid and returns i, else return NULL
+{
+	bgjobL* temp = bgjobs; // grab header
+	while (temp != NULL)
+	{
+		if (temp->pid == jobpid)
+			return temp;
+		
+		temp = temp->next;
+	}
+
+	return NULL; // we couldn't find it
+		
+}
 
 
 /*
@@ -640,5 +794,5 @@ RunBuiltInCmd(commandT* cmd)
  */
 void
 CheckJobs()
-{
+{	
 } /* CheckJobs */

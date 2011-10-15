@@ -37,7 +37,10 @@ char** paths;
 char* filedir;
 char* currentdir;
 char* cmdLine;
-pid_t fgpid;
+pid_t fgpid; // pid of fg
+pid_t lspid; // pid of last stopped
+char* fgcommands; // remember foreground's commands
+bgjobL* bgjobs;
 
 /************Function Prototypes******************************************/
 /* handles SIGINT and SIGSTOP signals */
@@ -74,6 +77,8 @@ main(int argc, char *argv[])
 	paths = (char**)malloc(100*sizeof(char*));
 	filedir = (char*)malloc(500*sizeof(char));
 	currentdir = (char*)malloc(500*sizeof(char));
+	
+	fgcommands = (char*)malloc(500*sizeof(char));
 
 	char pathsWithTokens[1024];
 	strcpy(pathsWithTokens, getenv("PATH"));
@@ -115,6 +120,8 @@ main(int argc, char *argv[])
 	free(paths);
 	free(filedir);
 	free(currentdir);
+
+	free(fgcommands);
   return 0;
 } /* main */
 
@@ -133,7 +140,14 @@ sig(int signo)
 {
 	if (signo == SIGINT) // Handle SIGINT
 	{
-		kill(SIGINT, fgpid);
-		PrintNewline();		
+		kill(SIGINT, -fgpid);	
+	}
+	if (signo == SIGTSTP) // Handle SIGTSTP
+	{
+		lspid = fgpid;
+		int i = addjob(fgpid, _STOPPED, fgcommands);
+		if (i == 0)
+			PrintPError("Error adding job");
+		kill(SIGTSTP, fgpid);
 	}
 } /* sig */
