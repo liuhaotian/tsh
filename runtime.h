@@ -59,6 +59,9 @@
 #define _STOPPED 0
 #define _RUNNING 1
 
+#define _JOBLIST 0
+#define _DONELIST 1
+
 typedef struct command_t
 {
   char* name;
@@ -73,15 +76,17 @@ char* currentdir; char* filedir; char** paths; pid_t fgpid; pid_t lspid; char* f
 typedef struct bgjob_l
 {
   pid_t pid;
-	int status; // either stopped or running
+	int status; // stopped or running, but when in donejobs is the index
 	char* commands;
   struct bgjob_l* next;
 } bgjobL;
 
-int addjob(pid_t, int, char*);
-int removejob(bgjobL*);
+int addjob(pid_t, int, char*, int);
+int removejob(bgjobL*, int);
 bgjobL* findjobindex(int);
 bgjobL* findjobpid(pid_t);
+int findindexpid(pid_t);
+bgjobL* getmostrecentjob();
 
 /***********************************************************************
  *  Title: Force a program exit

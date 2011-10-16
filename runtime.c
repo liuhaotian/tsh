@@ -75,6 +75,8 @@
 
 /* the pids of the background processes */
 bgjobL *bgjobs = NULL;
+/* done jobs list for CheckJobs() */
+bgjobL *donejobs = NULL;
 
 /* global variable to hold current directory when runtime funtions called */
 char* currentdir;
@@ -84,8 +86,9 @@ char* filedir;
 char** paths;
 
 pid_t fgpid; // pid of foreground
-pid_t lspid; // pid of last stopped
+//pid_t lspid; // pid of last stopped
 char* fgcommands; // keeps command string of current foreground so fg and bg can use it
+int fgstatus; // for busy loop
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -107,10 +110,12 @@ RunBuiltInCmd(commandT*);
 static bool
 IsBuiltIn(char*);
 
-int addjob(pid_t, int, char*);
-int removejob(bgjobL*);
+int addjob(pid_t, int, char*, int);
+int removejob(bgjobL*, int);
 bgjobL* findjobindex(int);
 bgjobL* findjobpid(pid_t);
+int findindexpid(pid_t);
+bgjobL* getmostrecentjob();
 
 /************External Declaration*****************************************/
 
@@ -506,8 +511,11 @@ void
 Exec(commandT* cmd, bool fg)
 {
 	// Fork and execute the command using filedir as command and cmd->argv as arguments
-	int status;
 	int pid;
+	sigset_t chldsigset; // Initialize and set sigset for procmask
+	sigemptyset(&chldsigset);
+	sigaddset(&chldsigset, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &chldsigset, NULL); // mask SIGCHLDs
 
 	char* commands = (char*)malloc(500*sizeof(char));
 	int i = 0;
@@ -528,8 +536,9 @@ Exec(commandT* cmd, bool fg)
 	{
 		if (pid == 0) // child process
 		{
-			if (!fg)
-				setpgid(0, 0); //only for backgrounded processes
+			setpgid(0,0);
+			// Unblock SIGCHLD first
+			sigprocmask(SIG_UNBLOCK, &chldsigset, NULL);			
 			// Child will execv the command
 			if (execv(filedir, cmd->argv) < 0)
 				PrintPError("Error in executing the command");
@@ -540,10 +549,14 @@ Exec(commandT* cmd, bool fg)
 			if (fg) {
 				fgpid = pid; //set global fgpid to current pid
 				strcpy(fgcommands, commands);
-				while ((pid = waitpid(pid, &status, WUNTRACED || WNOHANG)))
+				fgstatus = _RUNNING; // start fgstatus to _RUNNING
+
+				// Unblock SIGCHLD before busy loop
+				sigprocmask(SIG_UNBLOCK, &chldsigset, NULL);
+
+				while (fgstatus)
 				{
-					if (errno == ECHILD)
-						break;
+					sleep(1);
 				}
 			}
 			else // bg
@@ -551,15 +564,12 @@ Exec(commandT* cmd, bool fg)
 				char* ampersand = " &";
 				strcat(commands, ampersand);
 					
-				int jobnumber = addjob(pid, _RUNNING, commands);
+				int jobnumber = addjob(pid, _RUNNING, commands, _JOBLIST);
 				if (jobnumber == 0)
 					PrintPError("Error in adding job");
-				else
-				{
-					bgjobL* temp = findjobpid(pid);
-					printf("[%d] %d", jobnumber, temp->pid);
-					PrintNewline();
-				}
+			
+				// Unblock SIGCHLD after adding to job list
+				sigprocmask(SIG_UNBLOCK, &chldsigset, NULL);
 			}
 		}
 	}
@@ -664,31 +674,96 @@ RunBuiltInCmd(commandT* cmd)
 		while (temp != NULL)
 		{
 			if (temp->status) // running
-				printf("[%d]\tRunning\t\t\t\t%s\n", i, temp->commands);
+				printf("[%d]  Running\t\t  %s\n", i, temp->commands);
 			else
-				printf("[%d]\tStopped\t\t\t\t%s\n", i, temp->commands);
+				printf("[%d]  Stopped\t\t  %s\n", i, temp->commands);
 			temp = temp->next;
 			i++;
 		}
 	}
 	if (strcmp(cmd->argv[0], "bg") == 0)
 	{
+		if (cmd->argc > 2) // too many args
+		{
+			PrintPError("bg takes one or no arguments");
+			return;
+		}
+
+		//sigset_t chldsigset; // Initialize and set sigset for procmask
+		//sigemptyset(&chldsigset);
+		//sigaddset(&chldsigset, SIGCHLD);
+		//sigprocmask(SIG_BLOCK, &chldsigset, NULL); // mask SIGCHLDs
+
+		if (bgjobs != NULL)
+		{
+			bgjobL* temp;
+			if (cmd->argc == 1) // default
+				temp = getmostrecentjob();
+			else
+				temp = findjobindex( atoi(cmd->argv[1]) );
+
+			pid_t pid = temp->pid;
+			kill(-pid, SIGCONT); // Send SIGCONT to the job and all processes
+			temp->status = _RUNNING; // Set status to running
+			
+			//sigprocmask(SIG_UNBLOCK, &chldsigset, NULL); //unmask
+		}	
 	}
 	if (strcmp(cmd->argv[0], "fg") == 0)
 	{
+		if (cmd->argc > 2) // too many args
+		{
+			PrintPError("fg takes one or no arguments");
+			return;
+		}
+
+		//sigset_t chldsigset; // Initialize and set sigset for procmask
+		//sigemptyset(&chldsigset);
+		//sigaddset(&chldsigset, SIGCHLD);
+		//sigprocmask(SIG_BLOCK, &chldsigset, NULL); // mask SIGCHLDs
+
+		if (bgjobs != NULL)
+		{
+			bgjobL* temp;
+			if (cmd->argc == 1) // default
+				temp = getmostrecentjob();
+			else
+				temp = findjobindex( atoi(cmd->argv[1]) );
+			
+			fgpid = temp->pid; // set fg to pid of job
+			strcpy(fgcommands, temp->commands); // copy commands to fgcommands
+			
+			if (temp->status == _STOPPED) // if stopped, SIGCONT it to get it running again
+				kill(-fgpid, SIGCONT);
+
+			// remove from job list
+			if ( !removejob(temp, _JOBLIST) )
+				PrintPError("Not a job");
+
+			//sigprocmask(SIG_UNBLOCK, &chldsigset, NULL); //unmask
+			fgstatus = _RUNNING;
+			// Now wait on it with a busy loop
+			while (fgstatus)
+			{
+				sleep(1);
+			}
+		}
 	}
 } /* RunBuiltInCmd */
 
 /*
  * Job Functions
  */
-int addjob(pid_t jobpid, int jobstatus, char* jobcommands) // Makes and adds job to the job list and returns index of job
+int addjob(pid_t jobpid, int jobstatus, char* jobcommands, int whichlist) // Makes and adds job to the job list or done list and returns index of job
 {
 	int i = 1;
-	bgjobL* temp = bgjobs; // temporary header
+	bgjobL* temp;
+	if (whichlist == _JOBLIST)
+		temp = bgjobs; // temporary header
+	else
+		temp = donejobs;
 
-	bgjobL* newJob = NULL;
-	newJob = malloc(sizeof(bgjobL)); // malloc memory for new job
+	bgjobL* newJob = malloc(sizeof(bgjobL)); // malloc memory for new job
 	if (newJob == NULL)
 		PrintPError("Error in allocating memory for job");
 	// Initialize new job
@@ -700,7 +775,10 @@ int addjob(pid_t jobpid, int jobstatus, char* jobcommands) // Makes and adds job
 
 	if (temp == NULL) // start of list
 	{
-		bgjobs = newJob; // move header
+		if (whichlist == _JOBLIST)
+			bgjobs = newJob; // move header
+		else
+			donejobs = newJob;
 		return i;
 	}
 	else // something at start of list
@@ -719,15 +797,38 @@ int addjob(pid_t jobpid, int jobstatus, char* jobcommands) // Makes and adds job
 	}
 }
 
-int removejob(bgjobL* job) // Removes job from list, keeping integrity of list, returns 0 if empty list or not found 1 if success
+int removejob(bgjobL* job, int whichlist) // Removes job from either list, keeping integrity of list, returns 0 if empty list or not found 1 if success
 {
-	bgjobL* temp = bgjobs; // set temp pointer to head of jobs list
+	if (whichlist == _JOBLIST)
+	{
+		//Add done job to donelist so checkjobs can print it out in main
+		char* donecommands = (char*)malloc(500*sizeof(char));
+		char* jobcommands = job->commands;
+		strcpy(donecommands, jobcommands);
+		addjob(job->pid, findindexpid(job->pid), donecommands , _DONELIST); //status doubling as index
+		free(donecommands);
+	}
+
+	bgjobL* temp;
+	if (whichlist == _JOBLIST)
+		temp = bgjobs; // set temp pointer to head of jobs list
+	else
+		temp = donejobs;
+
 	if (temp == NULL) // noone in list
+	{
+		free(job->commands);
+		free(job); 
 		return 0;
+	}
 	// Find the node in list and delete and maintain list integrity
 	if (temp == job) // if first in list is the job
 	{
-		bgjobs = temp->next; // move header
+		if (whichlist == _JOBLIST)
+			bgjobs = temp->next; // move header
+		else
+			donejobs = temp->next;
+
 		free(job->commands); // free command pointer
 		free(job); // delete node
 		return 1;
@@ -737,7 +838,11 @@ int removejob(bgjobL* job) // Removes job from list, keeping integrity of list, 
 		while (temp->next != job && temp->next != NULL)
 			temp = temp->next;
 		if (temp->next == NULL) // we couldn't find it, not in list
+		{
+			free(job->commands);
+			free(job);
 			return 0;
+		}
 		
 		temp->next = job->next;
 		free(job->commands);
@@ -782,6 +887,38 @@ bgjobL* findjobpid(pid_t jobpid) // Looks for job of given pid and returns i, el
 		
 }
 
+int findindexpid(pid_t jobpid) // Look for index of given pid in job list
+{
+	bgjobL* temp = bgjobs;
+	if (temp == NULL) // no one in list
+		return 0;
+
+	int i = 1;
+	while (temp != NULL)
+	{
+		if (temp->pid == jobpid)
+			return i;
+
+		temp = temp->next;
+		i++;
+	}
+
+	return 0; // we couldn't find it
+}
+
+bgjobL* getmostrecentjob() // Returns the last backgrounded job
+{
+	bgjobL* temp = bgjobs; // grab header
+	if (temp == NULL) // no one in list
+		return NULL;
+	
+	while (temp->next != NULL)
+	{
+		temp = temp->next;
+	}
+
+	return temp;
+}
 
 /*
  * CheckJobs
@@ -794,5 +931,25 @@ bgjobL* findjobpid(pid_t jobpid) // Looks for job of given pid and returns i, el
  */
 void
 CheckJobs()
-{	
+{
+	bgjobL* temp = donejobs; // grab header
+	if (temp == NULL) // no one in list
+		return;
+	
+	do
+	{
+		printf("[%d]  Done\t\t  %s\n", temp->status, temp->commands);
+		temp = temp->next;
+	} while (temp != NULL);
+	
+	
+	temp = donejobs;
+	do
+	{
+		removejob(temp, _DONELIST);
+		temp = donejobs;
+	}
+	while (temp != NULL);
+
+	donejobs = NULL;
 } /* CheckJobs */

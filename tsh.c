@@ -16,6 +16,10 @@
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <stdio.h>
 
 /************Private include**********************************************/
 #include "tsh.h"
@@ -38,9 +42,11 @@ char* filedir;
 char* currentdir;
 char* cmdLine;
 pid_t fgpid; // pid of fg
-pid_t lspid; // pid of last stopped
+//pid_t lspid; // pid of last stopped
 char* fgcommands; // remember foreground's commands
 bgjobL* bgjobs;
+bgjobL* donejobs;
+int fgstatus; // status for busy while loop of foreground
 
 /************Function Prototypes******************************************/
 /* handles SIGINT and SIGSTOP signals */
@@ -72,6 +78,8 @@ main(int argc, char *argv[])
     PrintPError("SIGINT");
   if (signal(SIGTSTP, sig) == SIG_ERR)
     PrintPError("SIGTSTP");
+	if (signal(SIGCHLD, sig) == SIG_ERR)
+		PrintPError("SIGCHLD");
 
 	// Initialize global vars
 	paths = (char**)malloc(100*sizeof(char*));
@@ -104,11 +112,11 @@ main(int argc, char *argv[])
       /* read command line */
       getCommandLine(&cmdLine, BUFSIZE);
 
-      /* checks the status of background jobs */
-      CheckJobs();
-
       if (strcmp(cmdLine, "exit") == 0)
         break;
+
+			/* checks the status of background jobs */
+      CheckJobs();
 
       /* interpret command and line
        * includes executing of commands */
@@ -140,14 +148,37 @@ sig(int signo)
 {
 	if (signo == SIGINT) // Handle SIGINT
 	{
-		kill(SIGINT, -fgpid);	
+		kill(-fgpid, SIGINT);	
 	}
 	if (signo == SIGTSTP) // Handle SIGTSTP
 	{
-		lspid = fgpid;
-		int i = addjob(fgpid, _STOPPED, fgcommands);
+		//lspid = fgpid;
+		int i = addjob(fgpid, _STOPPED, fgcommands, _JOBLIST); // foreground becomes background
+		kill(-fgpid, SIGTSTP);
 		if (i == 0)
 			PrintPError("Error adding job");
-		kill(SIGTSTP, fgpid);
 	}
+	if (signo == SIGCHLD) // Handle SIGCHLD
+	{
+		pid_t chldpid;
+		int status;
+		chldpid = waitpid(-1, &status, WUNTRACED | WNOHANG); // wait on child with options for stopping childs
+		
+		if (chldpid == fgpid) // the foreground sent a SIGCHLD
+		{
+			fgstatus = _STOPPED; // set fgstatus to 0 so that the sleep loop in Exec can exit
+		}
+		else if (WIFEXITED(status) || WIFSIGNALED(status)) // SIGCHLD from bg process
+		{
+			if ( findjobpid(chldpid) == NULL) // not in list
+				return;
+			int index = findindexpid(chldpid);
+ 
+			if (WIFSIGNALED(status)) // bg child terminated with error status, notify user
+				printf("[%d] terminated with status %d  PID: %d\n", index,  WTERMSIG(status), chldpid);
+
+			if ( !removejob( findjobpid( chldpid ), _JOBLIST ) ) //Find job in list and remove it
+				PrintPError("SIGCHLD from child that is not a job");
+		}		 
+	} 
 } /* sig */
