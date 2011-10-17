@@ -109,6 +109,8 @@ main(int argc, char *argv[])
 			char *getCwdReturn = getcwd(currentdir, 500*sizeof(char));
 			if (getCwdReturn == NULL)
 				PrintPError("Error in finding current working directory");
+		  
+			
       /* read command line */
       getCommandLine(&cmdLine, BUFSIZE);
 
@@ -117,11 +119,12 @@ main(int argc, char *argv[])
 
       fgpid = 0;
 			/* checks the status of background jobs */
-      CheckJobs();
+      
 
       /* interpret command and line
        * includes executing of commands */
       Interpret(cmdLine);
+      CheckJobs();
     }
 
   /* shell termination */
@@ -153,12 +156,13 @@ sig(int signo)
 		kill(-fgpid, SIGINT);	
 	}
 	if (signo == SIGTSTP) // Handle SIGTSTP
-	{
+	  {
+	  PrintNewline();
 	  if (fgpid)
 	    {
 		//lspid = fgpid;
-		int i = addjob(fgpid, _STOPPED, fgcommands, _JOBLIST); // foreground becomes background
-		printf("[%d]  Stopped\t\t  %s\n", findindexpid(fgpid), fgcommands);
+	      int i = addjob(fgpid, _STOPPED, strcat(fgcommands, " &"), _JOBLIST); // foreground becomes background
+	      printf("[%d]   Stopped                  %s\n", findindexpid(fgpid), fgcommands);
 		kill(-fgpid, SIGTSTP);
 		if (i == 0)
 			PrintPError("Error adding job");

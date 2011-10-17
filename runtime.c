@@ -677,9 +677,9 @@ RunBuiltInCmd(commandT* cmd)
 		while (temp != NULL)
 		{
 			if (temp->status) // running
-				printf("[%d]  Running\t\t  %s\n", i, temp->commands);
+				printf("[%d]   Running                  %s\n", i, temp->commands);
 			else
-				printf("[%d]  Stopped\t\t  %s\n", i, temp->commands);
+				printf("[%d]   Stopped                  %s\n", i, temp->commands);
 			temp = temp->next;
 			i++;
 		}
@@ -1048,7 +1048,9 @@ CheckJobs()
 	
 	do
 	{
-		printf("[%d]  Done\t\t  %s\n", temp->status, temp->commands);
+		temp->commands[strlen(temp->commands)] = 0;
+		temp->commands[strlen(temp->commands) - 1] = 0; // rid the ampersand
+		printf("[%d]   Done                     %s\n", temp->status, temp->commands);
 		temp = temp->next;
 	} while (temp != NULL);
 	
