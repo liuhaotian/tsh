@@ -115,6 +115,7 @@ main(int argc, char *argv[])
       if (strcmp(cmdLine, "exit") == 0)
         break;
 
+      fgpid = 0;
 			/* checks the status of background jobs */
       CheckJobs();
 
@@ -152,11 +153,15 @@ sig(int signo)
 	}
 	if (signo == SIGTSTP) // Handle SIGTSTP
 	{
+	  if (fgpid)
+	    {
 		//lspid = fgpid;
 		int i = addjob(fgpid, _STOPPED, fgcommands, _JOBLIST); // foreground becomes background
+		printf("[%d]  Stopped\t\t  %s\n", findindexpid(fgpid), fgcommands);
 		kill(-fgpid, SIGTSTP);
 		if (i == 0)
 			PrintPError("Error adding job");
+	    }
 	}
 	if (signo == SIGCHLD) // Handle SIGCHLD
 	{
