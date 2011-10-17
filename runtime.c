@@ -775,7 +775,16 @@ RunBuiltInCmd(commandT* cmd)
 			{
 				while (TRUE)
 				{
-					if(temp!=NULL)printf("alias %s\n",temp->aliascmdline);
+					if(temp!=NULL){
+						int i;
+						for( i = 0; temp->aliascmdline[i] != 0; ++i)
+						{
+							putchar(temp->aliascmdline[i]);
+							if(temp->aliascmdline[i]=='=')putchar('\'');
+							if(temp->aliascmdline[i+1]==0)puts("\'");
+						}
+						//printf("alias %s\n",temp->aliascmdline);
+					}
 					if (temp->next == NULL)
 					{
 						break;
@@ -834,14 +843,15 @@ RunBuiltInCmd(commandT* cmd)
 				if( ( temp != NULL ) && (strncmp(cmd->argv[1],temp->aliascmdline,strlen(cmd->argv[1]))==0) )// we find the alias, so unalias it
 				{
 					previousalias->next = temp->next;
-					if(temp==aliaslist)aliaslist=NULL;
+					if(temp==aliaslist)aliaslist=temp->next;
 					free(temp->aliascmdline);
 					free(temp);
 					break;
 				}
-				if (temp->next == NULL)
+				if ( ( temp == NULL ) || (temp->next == NULL) )
 				{
-					PrintPError(cmd->argv[1]);
+					printf("%s: unalias: %s: not found\n",SHELLNAME,cmd->argv[1]);
+					//PrintPError(cmd->argv[1]);
 					break;
 				}
 				previousalias = temp;
