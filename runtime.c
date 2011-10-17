@@ -78,6 +78,9 @@ bgjobL *bgjobs = NULL;
 /* done jobs list for CheckJobs() */
 bgjobL *donejobs = NULL;
 
+/* alias list */
+aliasL *aliaslist = NULL;
+
 /* global variable to hold current directory when runtime funtions called */
 char* currentdir;
 /* global variable to hold directory of found command file for ResolveExternalCmd and RunExternalCmd communication */
@@ -596,7 +599,7 @@ Exec(commandT* cmd, bool fg)
 static bool
 IsBuiltIn(char* cmd)
 {
-	  if (strcmp(cmd, "pwd") == 0 || strcmp(cmd, "cd") == 0 || strcmp(cmd, "jobs") == 0 || strcmp(cmd, "fg") == 0 || strcmp(cmd, "bg") == 0)
+	  if (strcmp(cmd, "pwd") == 0 || strcmp(cmd, "cd") == 0 || strcmp(cmd, "jobs") == 0 || strcmp(cmd, "fg") == 0 || strcmp(cmd, "bg") == 0 || strcmp(cmd, "alias") == 0 || strcmp(cmd, "unalias") == 0)
 			return TRUE;
 		else
 			return FALSE;
@@ -746,6 +749,92 @@ RunBuiltInCmd(commandT* cmd)
 			while (fgstatus)
 			{
 				sleep(1);
+			}
+		}	
+	}
+	if (strcmp(cmd->argv[0], "alias") == 0){
+		aliasL* temp=aliaslist;
+		if(cmd->argc==1)/*	show all the alias	*/
+		{
+			if (temp == NULL) // start of list
+			{
+				;
+			}
+			else // something at start of list
+			{
+				while (TRUE)
+				{
+					if(temp!=NULL)printf("alias %s\n",temp->aliascmdline);
+					if (temp->next == NULL)
+					{
+						break;
+					}
+					temp = temp->next;
+				}
+			}
+			
+		}
+		else{
+			aliasL* newalias = malloc(sizeof(aliasL)); // malloc memory for new alias
+			if (newalias == NULL){
+				PrintPError("Error in allocating memory for alias");
+				return;
+			}
+
+			// Initialize new alias
+			newalias->aliascmdline = (char*)malloc(strlen(cmd->argv[1]+1));
+			if (newalias->aliascmdline == NULL){
+				PrintPError("Error in allocating memory for alias");
+				return;
+			}
+			strcpy(newalias->aliascmdline, cmd->argv[1]);
+			newalias->next = NULL;
+
+			if (temp == NULL) // start of list
+			{
+				aliaslist=newalias;
+			}
+			else // something at start of list
+			{
+				while (TRUE)
+				{
+					if (temp->next == NULL)
+					{
+						temp->next = newalias;
+						break;
+					}
+					temp = temp->next;
+				}
+			}
+		}
+		
+	}
+	if (strcmp(cmd->argv[0], "unalias") == 0){
+		aliasL* temp=aliaslist;
+		aliasL* previousalias=aliaslist;
+		if(cmd->argc==1)// do nothing
+		{
+			;
+		}
+		else
+		{
+			while (TRUE)
+			{
+				if( ( temp != NULL ) && (strncmp(cmd->argv[1],temp->aliascmdline,strlen(cmd->argv[1]))==0) )// we find the alias, so unalias it
+				{
+					previousalias->next = temp->next;
+					if(temp==aliaslist)aliaslist=NULL;
+					free(temp->aliascmdline);
+					free(temp);
+					break;
+				}
+				if (temp->next == NULL)
+				{
+					PrintPError(cmd->argv[1]);
+					break;
+				}
+				previousalias = temp;
+				temp = temp->next;
 			}
 		}
 	}

@@ -81,6 +81,12 @@ typedef struct bgjob_l
   struct bgjob_l* next;
 } bgjobL;
 
+typedef struct alias_l	//list for alias
+{
+	char*	aliascmdline;
+  struct	alias_l* next;
+} aliasL;
+
 int addjob(pid_t, int, char*, int);
 int removejob(bgjobL*, int);
 bgjobL* findjobindex(int);
