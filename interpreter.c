@@ -68,6 +68,11 @@ typedef struct string_l
 int BUFSIZE = 512;
 int MAXARGS = 100;
 
+/************Global Variables*********************************************/
+
+/* alias list */
+extern aliasL *aliaslist;
+
 /**************Function Prototypes******************************************/
 
 commandT*
@@ -128,6 +133,8 @@ getCommand(char* cmdLine)
   int i, inArg = 0;
   char quote = 0;
   char escape = 0;
+	aliasL* temp=aliaslist;// for checking alias
+	int j;
 
   // Set up the initial empty argument
   char* tmp = malloc(sizeof(char*) * BUFSIZE);
@@ -149,18 +156,60 @@ getCommand(char* cmdLine)
             {
               // End of an argument
               //printf("\t\tend of argument %d, got:%s\n", cmd.argc, tmp);
+				
+				/*	check the alias	*/
+				if(aliaslist!=NULL)
+				{
+					temp=aliaslist;
+					while (TRUE)
+					{
+						if( (cmd->argv[0]!=0) && ( (strcmp(cmd->argv[0],"alias")==0) || (strcmp(cmd->argv[0],"unalias")==0) ) )
+						{
+							break;
+						}
+						if( ( temp != NULL ) && (strncmp(tmp,temp->aliascmdline,tmpLen)==0) ){
+							for( j = tmpLen+1,tmpLen=0; temp->aliascmdline[j] != 0; ++j)
+							{
+								tmp[tmpLen]=temp->aliascmdline[j];
+								if(temp->aliascmdline[j+1]==' ')
+								{
+									tmp[++tmpLen]=0;
+									cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
+									strcpy(cmd->argv[cmd->argc], tmp);
+									tmp[0] = 0;
+								    tmpLen = 0;
+									cmd->argc++;
+								    cmd->argv[cmd->argc] = 0;
+									while(temp->aliascmdline[j+1]==' ')j++;
+									continue;
+								}
+								tmpLen++;
+							}
+							tmp[tmpLen]=0;
+							break;
+							//printf("alias %s\n",temp->aliascmdline);
+						}
+						if (temp->next == NULL)
+						{
+							break;
+						}
+						temp = temp->next;
+					}
+				}
+			if(tmp[0]!=0){	
               cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
               strcpy(cmd->argv[cmd->argc], tmp);
+              cmd->argc++;
+              cmd->argv[cmd->argc] = 0;
+			}
 
               inArg = 0;
               tmp[0] = 0;
               tmpLen = 0;
-              cmd->argc++;
-              cmd->argv[cmd->argc] = 0;
               continue;
             }
         }
-
+		
       // If we get here, we're in text or a quoted string
       inArg = 1;
 
@@ -227,14 +276,56 @@ getCommand(char* cmdLine)
   if (tmpLen > 0)
     {
       //printf("\t\tend of argument %d, got:%s\n", cmd.argc, tmp);
-      cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
-      strcpy(cmd->argv[cmd->argc], tmp);
+		
+		/*	check the alias	*/
+		if(aliaslist!=NULL)
+		{
+			temp=aliaslist;
+			while (TRUE)
+			{
+				if( (cmd->argv[0]!=0) && ( (strcmp(cmd->argv[0],"alias")==0) || (strcmp(cmd->argv[0],"unalias")==0) ) )
+				{
+					break;
+				}
+				if( ( temp != NULL ) && (strncmp(tmp,temp->aliascmdline,tmpLen)==0) ){
+					for( j = tmpLen+1,tmpLen=0; temp->aliascmdline[j] != 0; ++j)
+					{
+						tmp[tmpLen]=temp->aliascmdline[j];
+						if(temp->aliascmdline[j+1]==' ')
+						{
+							tmp[++tmpLen]=0;
+							cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
+							strcpy(cmd->argv[cmd->argc], tmp);
+							tmp[0] = 0;
+						    tmpLen = 0;
+							cmd->argc++;
+						    cmd->argv[cmd->argc] = 0;
+							while(temp->aliascmdline[j+1]==' ')j++;
+							continue;
+						}
+						tmpLen++;
+					}
+					tmp[tmpLen]=0;
+					break;
+					//printf("alias %s\n",temp->aliascmdline);
+				}
+				if (temp->next == NULL)
+				{
+					break;
+				}
+				temp = temp->next;
+			}
+		}
+		if(tmp[0]!=0){	
+          cmd->argv[cmd->argc] = malloc(sizeof(char) * (tmpLen + 1));
+          strcpy(cmd->argv[cmd->argc], tmp);
+          cmd->argc++;
+          cmd->argv[cmd->argc] = 0;
+		}
 
       inArg = 0;
       tmp[0] = 0;
       tmpLen = 0;
-      cmd->argc++;
-      cmd->argv[cmd->argc] = 0;
     }
 
   free(tmp);

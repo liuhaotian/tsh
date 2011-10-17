@@ -182,6 +182,15 @@ RunCmd(commandT* cmd)
 			pipestatus=i;
 			break;
 		}
+		else if(cmd->argv[i][0] == '~')
+		{
+			char* tempcmd=malloc(  sizeof(char) * ( strlen(cmd->argv[i]) + strlen(getenv("HOME")) )  );
+			strcpy(tempcmd,getenv("HOME"));
+			strcat(tempcmd,cmd->argv[i]+1);
+			free(cmd->argv[i]);
+			cmd->argv[i]=tempcmd;
+			
+		}
 	}
 	
 	if(redirstatus==1)
