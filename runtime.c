@@ -788,6 +788,7 @@ RunBuiltInCmd(commandT* cmd)
 						int i;
 						for( i = 0; temp->aliascmdline[i] != 0; ++i)
 						{
+							if(i==0)printf("alias ");
 							putchar(temp->aliascmdline[i]);
 							if(temp->aliascmdline[i]=='=')putchar('\'');
 							if(temp->aliascmdline[i+1]==0)puts("\'");
