@@ -702,8 +702,14 @@ RunBuiltInCmd(commandT* cmd)
 			bgjobL* temp;
 			if (cmd->argc == 1) // default
 				temp = getmostrecentjob();
-			else
+			else if (findjobindex(atoi(cmd->argv[1])))
 				temp = findjobindex( atoi(cmd->argv[1]) );
+			else
+			{
+				PrintPError("Index outside of job bounds");
+				return;
+			}
+			
 
 			pid_t pid = temp->pid;
 			kill(-pid, SIGCONT); // Send SIGCONT to the job and all processes
@@ -730,8 +736,13 @@ RunBuiltInCmd(commandT* cmd)
 			bgjobL* temp;
 			if (cmd->argc == 1) // default
 				temp = getmostrecentjob();
-			else
+			else if (findjobindex(atoi(cmd->argv[1])))
 				temp = findjobindex( atoi(cmd->argv[1]) );
+			else
+			{
+				PrintPError("Index outside of job bounds");
+				return;
+			}
 			
 			fgpid = temp->pid; // set fg to pid of job
 			strcpy(fgcommands, temp->commands); // copy commands to fgcommands
