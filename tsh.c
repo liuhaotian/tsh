@@ -149,6 +149,7 @@ sig(int signo)
 {
 	if (signo == SIGINT) // Handle SIGINT
 	{
+	  if (fgpid)
 		kill(-fgpid, SIGINT);	
 	}
 	if (signo == SIGTSTP) // Handle SIGTSTP
