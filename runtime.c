@@ -114,11 +114,12 @@ static bool
 IsBuiltIn(char*);
 
 int addjob(pid_t, int, char*, int);
-int removejob(bgjobL*, int);
+int removejob(bgjobL*, int, int);
 bgjobL* findjobindex(int);
 bgjobL* findjobpid(pid_t);
 int findindexpid(pid_t);
 bgjobL* getmostrecentjob();
+int getnewindex();
 
 /************External Declaration*****************************************/
 
@@ -533,12 +534,23 @@ Exec(commandT* cmd, bool fg)
 	int i = 0;
 	while (cmd->argv[i] != 0) // traverse commands and copy into one new jobcommands string
 	{
-		if (i == 0)
-		strcpy(commands, cmd->argv[i]);
+	  int j = 0; int insertquotes = 0;
+	  while (cmd->argv[i][j] != 0)
+	  {
+	    if (cmd->argv[i][j] == ' ') // if there are spaces in a single command
+	      insertquotes = 1;
+	    j++;
+	  }
+	  if (i == 0)
+		  strcpy(commands, cmd->argv[i]);
 	  else
 		{
 		 	strcat(commands, " ");
+			if (insertquotes)
+			  strcat(commands, "\"");
 			strcat(commands, cmd->argv[i]);
+			if (insertquotes)
+			  strcat(commands, "\"");
 		}
 		i++;
 	}
@@ -682,15 +694,27 @@ RunBuiltInCmd(commandT* cmd)
 	if (strcmp(cmd->argv[0], "jobs") == 0)
 	{
 		bgjobL* temp = bgjobs;
-		int i = 1;
 		while (temp != NULL)
 		{
 			if (temp->status) // running
-				printf("[%d]   Running                  %s\n", i, temp->commands);
+			{
+				char* commands = (char*)malloc(500*sizeof(char));
+				strcpy(commands, temp->commands);
+				if (commands[strlen(commands) - 1] != '&')
+				  strcat(commands, " &");
+				printf("[%d]   Running                  %s\n", temp->index, commands);
+				fflush(stdout);
+				free(commands);
+			}
 			else
-				printf("[%d]   Stopped                  %s\n", i, temp->commands);
+			{
+				//char* commands = (char*)malloc(500*sizeof(char));
+				//strcpy(commands, temp->commands);
+				printf("[%d]   Stopped                  %s\n", temp->index, temp->commands);
+				fflush(stdout);
+				//free(commands);
+			}
 			temp = temp->next;
-			i++;
 		}
 	}
 	if (strcmp(cmd->argv[0], "bg") == 0)
@@ -724,6 +748,7 @@ RunBuiltInCmd(commandT* cmd)
 			kill(-pid, SIGCONT); // Send SIGCONT to the job and all processes
 			temp->status = _RUNNING; // Set status to running
 			
+			
 			//sigprocmask(SIG_UNBLOCK, &chldsigset, NULL); //unmask
 		}	
 	}
@@ -755,12 +780,13 @@ RunBuiltInCmd(commandT* cmd)
 			
 			fgpid = temp->pid; // set fg to pid of job
 			strcpy(fgcommands, temp->commands); // copy commands to fgcommands
+			fgcommands[strlen(fgcommands) - 1] = 0;
 			
 			if (temp->status == _STOPPED) // if stopped, SIGCONT it to get it running again
 				kill(-fgpid, SIGCONT);
 
 			// remove from job list
-			if ( !removejob(temp, _JOBLIST) )
+			if ( !removejob(temp, _JOBLIST, 1) )
 				PrintPError("Not a job");
 
 			//sigprocmask(SIG_UNBLOCK, &chldsigset, NULL); //unmask
@@ -876,7 +902,7 @@ RunBuiltInCmd(commandT* cmd)
  */
 int addjob(pid_t jobpid, int jobstatus, char* jobcommands, int whichlist) // Makes and adds job to the job list or done list and returns index of job
 {
-	int i = 1;
+	int i = getnewindex(); // grab what the index should be
 	bgjobL* temp;
 	if (whichlist == _JOBLIST)
 		temp = bgjobs; // temporary header
@@ -890,6 +916,7 @@ int addjob(pid_t jobpid, int jobstatus, char* jobcommands, int whichlist) // Mak
 	newJob->pid = jobpid;
 	newJob->status = jobstatus;
 	newJob->commands = (char*)malloc(500*sizeof(char));
+	newJob->index = i;
 	strcpy(newJob->commands, jobcommands);
 	newJob->next = NULL;
 
@@ -905,7 +932,6 @@ int addjob(pid_t jobpid, int jobstatus, char* jobcommands, int whichlist) // Mak
 	{
 		while (TRUE)
 		{
-			i++;
 			if (temp->next == NULL)
 			{
 				temp->next = newJob;
@@ -917,15 +943,15 @@ int addjob(pid_t jobpid, int jobstatus, char* jobcommands, int whichlist) // Mak
 	}
 }
 
-int removejob(bgjobL* job, int whichlist) // Removes job from either list, keeping integrity of list, returns 0 if empty list or not found 1 if success
+int removejob(bgjobL* job, int whichlist, int fg) // Removes job from either list, keeping integrity of list, returns 0 if empty list or not found 1 if success
 {
-	if (whichlist == _JOBLIST)
+	if (whichlist == _JOBLIST && !fg)
 	{
 		//Add done job to donelist so checkjobs can print it out in main
 		char* donecommands = (char*)malloc(500*sizeof(char));
 		char* jobcommands = job->commands;
 		strcpy(donecommands, jobcommands);
-		addjob(job->pid, findindexpid(job->pid), donecommands , _DONELIST); //status doubling as index
+		addjob(job->pid, job->index, donecommands , _DONELIST); // status doubling as index
 		free(donecommands);
 	}
 
@@ -974,6 +1000,8 @@ int removejob(bgjobL* job, int whichlist) // Removes job from either list, keepi
 
 bgjobL* findjobindex(int index) // Looks for job of given index and returns it, else return NULL
 {
+	// Changed due to change of the way index is handled
+	/*
 	if (index < 1) // no such index
 		return NULL;
 
@@ -989,7 +1017,19 @@ bgjobL* findjobindex(int index) // Looks for job of given index and returns it, 
 
 		temp = temp->next;
 	}
-	return NULL; // shouldn't get here
+	return NULL; // shouldn't get here */
+	
+	bgjobL* temp = bgjobs;
+	while (temp != NULL)
+	{
+	  if (temp->index == index)
+	      return temp;
+	  
+	  temp = temp->next;
+	}
+	
+	return NULL;
+	
 }
 
 bgjobL* findjobpid(pid_t jobpid) // Looks for job of given pid and returns i, else return NULL
@@ -1009,6 +1049,8 @@ bgjobL* findjobpid(pid_t jobpid) // Looks for job of given pid and returns i, el
 
 int findindexpid(pid_t jobpid) // Look for index of given pid in job list
 {
+	// ORIGINALLY had index be just the order number in list but changed to absolute number to pass test cases
+	/*
 	bgjobL* temp = bgjobs;
 	if (temp == NULL) // no one in list
 		return 0;
@@ -1023,7 +1065,9 @@ int findindexpid(pid_t jobpid) // Look for index of given pid in job list
 		i++;
 	}
 
-	return 0; // we couldn't find it
+	return 0; // we couldn't find it */
+	
+	return ((findjobpid(jobpid))->index);
 }
 
 bgjobL* getmostrecentjob() // Returns the last backgrounded job
@@ -1039,6 +1083,30 @@ bgjobL* getmostrecentjob() // Returns the last backgrounded job
 
 	return temp;
 }
+
+int getnewindex() // Gets the new index for addjob
+{
+  
+    // Ideally, this would set the new index to the next largest only if the list has no inconsistencies (ie. a list with jobs of indices 1,2,4 would be inconsistent because we could add a job and make it index 3)
+    bgjobL* temp = bgjobs; // grab header
+    int i = 1;
+    if (temp == NULL) // no one in list
+	return i;
+    
+    if (temp->next == NULL && temp->index > 1) // only one in list and it's got an index greater than 1, so make new one 1
+      return i;
+    
+    i = temp->index;
+    while (temp->next != NULL)
+    {
+      temp = temp->next;
+      if (temp->index > i)
+	i = temp->index;
+    }
+    i++;
+    return i;
+}
+      
 
 /*
  * CheckJobs
@@ -1060,7 +1128,8 @@ CheckJobs()
 	{
 		temp->commands[strlen(temp->commands)] = 0;
 		temp->commands[strlen(temp->commands) - 1] = 0; // rid the ampersand
-		printf("[%d]   Done                     %s\n", temp->status, temp->commands);
+		printf("[%d]   Done                     %s\n", temp->status, temp->commands); //status doubling as index
+		fflush(stdout);
 		temp = temp->next;
 	} while (temp != NULL);
 	
@@ -1068,7 +1137,7 @@ CheckJobs()
 	temp = donejobs;
 	do
 	{
-		removejob(temp, _DONELIST);
+		removejob(temp, _DONELIST, 0);
 		temp = donejobs;
 	}
 	while (temp != NULL);

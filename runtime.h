@@ -78,6 +78,7 @@ typedef struct bgjob_l
   pid_t pid;
 	int status; // stopped or running, but when in donejobs is the index
 	char* commands;
+	int index; // index of job
   struct bgjob_l* next;
 } bgjobL;
 
@@ -88,11 +89,12 @@ typedef struct alias_l	//list for alias
 } aliasL;
 
 int addjob(pid_t, int, char*, int);
-int removejob(bgjobL*, int);
+int removejob(bgjobL*, int, int);
 bgjobL* findjobindex(int);
 bgjobL* findjobpid(pid_t);
 int findindexpid(pid_t);
 bgjobL* getmostrecentjob();
+int getnewindex();
 
 /***********************************************************************
  *  Title: Force a program exit

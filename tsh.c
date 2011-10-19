@@ -120,11 +120,14 @@ main(int argc, char *argv[])
       fgpid = 0;
 			/* checks the status of background jobs */
       
+      CheckJobs();
+	
 
       /* interpret command and line
        * includes executing of commands */
       Interpret(cmdLine);
-      CheckJobs();
+      fflush(stdout);
+      fgpid = NULL;
     }
 
   /* shell termination */
@@ -157,15 +160,23 @@ sig(int signo)
 	}
 	if (signo == SIGTSTP) // Handle SIGTSTP
 	  {
-	  PrintNewline();
 	  if (fgpid)
 	    {
-		//lspid = fgpid;
-	      int i = addjob(fgpid, _STOPPED, strcat(fgcommands, " &"), _JOBLIST); // foreground becomes background
-	      printf("[%d]   Stopped                  %s\n", findindexpid(fgpid), fgcommands);
-		kill(-fgpid, SIGTSTP);
-		if (i == 0)
-			PrintPError("Error adding job");
+				//lspid = fgpid;
+				
+				int index;
+				if (getmostrecentjob() == NULL) // no one in jobs list
+				  index = 1;
+				else
+				  index = findindexpid( (getmostrecentjob())->pid ) + 1;
+	      printf("[%d]   Stopped                  %s\n", index, fgcommands);
+				fflush(stdout);
+				//if (fgcommands[strlen(fgcommands)-1] != '&')
+				  //strcat(fgcommands, " &");
+				int i = addjob(fgpid, _STOPPED, fgcommands, _JOBLIST); // foreground becomes background
+				kill(-fgpid, SIGTSTP);
+				if (i == 0)
+					PrintPError("Error adding job");
 	    }
 	}
 	if (signo == SIGCHLD) // Handle SIGCHLD
@@ -185,9 +196,12 @@ sig(int signo)
 			int index = findindexpid(chldpid);
  
 			if (WIFSIGNALED(status)) // bg child terminated with error status, notify user
-				printf("[%d] terminated with status %d  PID: %d\n", index,  WTERMSIG(status), chldpid);
+				{
+					printf("[%d] terminated with status %d  PID: %d\n", index,  WTERMSIG(status), chldpid);
+					fflush(stdout);
+				}				
 
-			if ( !removejob( findjobpid( chldpid ), _JOBLIST ) ) //Find job in list and remove it
+			if ( !removejob( findjobpid( chldpid ), _JOBLIST, 0 ) ) //Find job in list and remove it
 				PrintPError("SIGCHLD from child that is not a job");
 		}		 
 	} 
