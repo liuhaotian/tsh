@@ -8,7 +8,7 @@ tsh \- A tiny shell
 .B tsh
 .SH DESCRIPTION
 .B tsh
-This tiny shell includes basic built-in commands for seeing and changing the shell's working directory. In addition, the shell will look for any other commands by looking through the directories listed in PATH for them, and execute them with their respective parameters. This shell implements SIGINT handling via ctrl-c on the keyboard, killing any process that may have been executed via the shell. Note that this shell only runs one command at a time in the foreground.
+This tiny shell includes basic built-in commands for seeing and changing the shell's working directory. In addition, the shell will look for any other commands by looking through the directories listed in PATH for them, and execute them with their respective parameters. The shell has job control and implements pipes and I/O redirection. This shell implements SIGINT and SIGTSTP handling.
 .SH BUILT-IN COMMANDS
 .IP exit
 Quit tsh
@@ -16,8 +16,26 @@ Quit tsh
 Print the working directory
 .IP cd
 Change the working directory, arguments include absolute paths, ./ paths, and .. (or combinations of ../) to go up the directory hierarchy. Also with no argument returns to directory denoted by HOME environment variable.
+.IP &
+Appending & onto a command runs the command in the background, adding it to the job list. The user may then use the shell immediately.
+.IP |
+Adding | between two commands creates a pipe so that the second command can get its input from the first command's output. There is no limit on the amount of pipes the user may enter in a single line.
+.IP >
+Adding > after a command and before a file redirects the command's output to the file. Supports multiple redirections per line.
+.IP <
+Adding < after a command and before a file redirects the command's input to the file. Supports multiple redirections per line.
+.IP jobs
+Displays the job list in the following format -> [d]  Status               Commands <- where d is the index of the job, status is either Running or Stopped, and commands are the commands the user inputted for that specific job.
+.IP bg
+When given no argument, bg sends a SIGCONT to the most recently backgrounded job. With the optional argument, bg d sends a SIGCONT to the job with index d.
+.IP fg
+When given no argument, fg places the most recently backgrounded job in the foreground. It removes the job from the job list and waits on it. The user then cannot enter additional commands until the job is finished. The optional argument, fg d, selects the job with index d and foregrounds it.
+.IP alias
+With given no argument, prints a list of all aliases. With an argument in format string1=string2, makes string1 an alias to string2 ie. whenever the user now inputs string1 the shell will treat it as if the user inputted string2.
+.IP unalias
+Unaliases the given alias argument.
 .SH DESIGN APPROACH
-The approach taken was to have a loop in main to repeatedly look for the command line, parse it, and call the interpreter. The interpreter would then call RunCmd with the command line, which looks at the first argument and decides whether it is built-in (and if so to execute the built-in immediately) or if the command needs to be resolved. It does this by calling the ResolveExternalCmd() function, which takes an array of strings to the path hierarchy denoted from the PATH environment. It first looks to see whether the command is an executable in the current working directory or if it is an absolute command to an executable and handles it appropriately. If it is neither, then it searches through the directories in the array for it. If at any point ResolveExternalCmd() finds the executable (by running the system call access() on it), it changes a global variable to the full path for the executable and returns TRUE to RunCmd(). This allows RunCmd() to call Exec() through RunExternalCmd() and to fork and execv the program. The array for the PATH hierarchy was built before the while loop in main (by utilizing the strtok() string function to parse out :) and stored as a global variable. Finally, two signal handlers were installed to handle SIGINT respectively for the parent and the running child process in the foreground. No extra credit was attempted. The major challenges were implementing cd and ResolveExternalCmd() because they must account for various argument types. Also, knowing when to malloc variables and when to free them as well as utilizing many pointers and arrays required lots of debugging for SEGFAULTS or memory leaks.
+(We attempted extra credit and would like to be considered for competition). The approach taken was to have a loop in main to repeatedly look for the command line, parse it, and call the interpreter which executes the command. If the command is not a built-in command, then we fork and execve the command by finding it (either through PATH or in the current directory). We designed our shell to have job control, and to do that we needed two linked lists (one for the current jobs and one for the done jobs buffer). Then, in the main loop CheckJobs() is called to print out which jobs have finished and clean up the done jobs buffer. Additional functions were provided for manipulating the job list, such as addjob, removejob, findjobpid (finds the job given its pid) etc. At first, we tried using the ordering of the linked list as the index for a job, but that did not work out, so we added a member index to the bgjobL structure. Alias and unalias also required us to make a linked list (and also a new struct) to hold all the aliased strings. Our signal handler switches based on three signals -> SIGINT (which forwards SIGINT to the fg process), SIGTSTP(which forwards SIGTSTP to the fg process and then adds it to the job list with status Stopped), and SIGCHLD(which handles all signals sent from the childs that the shell forked, so that we can reap them and know when backgrounded processes have finished so that we can add them to the done buffer). The difficult parts of this lab included redirecting input/output and handling the lists. the SIGCHLD handler was difficult because it requires lots of if statements regarding flags (WIFEXITED, etc).  
 .SH AUTHOR
 George Wheaton	gjw571 GeorgeWheaton2013@u.northwestern.edu			
 Haotian Liu	 hlc720 haotian@u.northwestern.edu
