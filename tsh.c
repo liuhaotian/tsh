@@ -127,7 +127,8 @@ main(int argc, char *argv[])
        * includes executing of commands */
       Interpret(cmdLine);
       fflush(stdout);
-      fgpid = NULL;
+      fgpid = 0;
+      //fgpid = (pid_t *)NULL;
     }
 
   /* shell termination */
@@ -160,7 +161,7 @@ sig(int signo)
 	}
 	if (signo == SIGTSTP) // Handle SIGTSTP
 	  {
-	  if (fgpid)
+	  if (fgpid != 0)
 	    {
 				//lspid = fgpid;
 				
