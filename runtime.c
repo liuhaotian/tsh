@@ -800,6 +800,7 @@ RunBuiltInCmd(commandT* cmd)
 	}
 	if (strcmp(cmd->argv[0], "alias") == 0){
 		aliasL* temp=aliaslist;
+		aliasL* previousalias=aliaslist;
 		if(cmd->argc==1)/*	show all the alias	*/
 		{
 			if (temp == NULL) // start of list
@@ -854,11 +855,21 @@ RunBuiltInCmd(commandT* cmd)
 			{
 				while (TRUE)
 				{
-					if (temp->next == NULL)
+					if(strcmp(cmd->argv[1],temp->aliascmdline)<=0)//we find the small one, so insert it
+					{
+						if( previousalias!=aliaslist)previousalias->next=newalias;
+						newalias->next=temp;
+						if( previousalias==aliaslist)aliaslist=newalias;
+						break;
+						
+					}
+					else if (temp->next == NULL)
 					{
 						temp->next = newalias;
 						break;
 					}
+
+					previousalias = temp;
 					temp = temp->next;
 				}
 			}
